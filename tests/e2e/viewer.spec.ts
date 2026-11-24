@@ -201,7 +201,15 @@ test.describe('viewer', () => {
       (id) => (globalThis as unknown as { chrome: { developerPrivate: { updateExtensionConfiguration(c: object): Promise<void> } } }).chrome.developerPrivate.updateExtensionConfiguration({ extensionId: id, fileAccess: true }),
       extensionId,
     );
-    await expect(page.locator('#allow-on-file-urls cr-toggle')).toHaveAttribute('aria-checked', 'true');
+    // Check the setting itself, not the toggle's markup (which differs between Chromium builds).
+    await expect
+      .poll(() =>
+        page.evaluate(
+          async (id) => (await (globalThis as unknown as { chrome: { developerPrivate: { getExtensionInfo(id: string): Promise<{ fileAccess: { isActive: boolean } }> } } }).chrome.developerPrivate.getExtensionInfo(id)).fileAccess.isActive,
+          extensionId,
+        ),
+      )
+      .toBe(true);
     const file = pathToFileURL(fileURLToPath(new URL('../fixtures/sample.md', import.meta.url))).href;
     await page.goto(file);
     await page.waitForURL(/viewer\.html\?src=/, { timeout: 15_000 });
