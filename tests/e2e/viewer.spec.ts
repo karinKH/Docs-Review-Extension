@@ -91,6 +91,58 @@ test.describe('viewer', () => {
     await expect(page.locator('.preview-text')).toContainText('Replace this text:');
   });
 
+  test('clicking a heading selects its whole section; the contents list can comment on a section', async ({ context, extensionId }) => {
+    const page = await context.newPage();
+    await page.goto(`chrome-extension://${extensionId}/viewer.html?demo=1`);
+    await page.locator('.md h2', { hasText: '2. Widen a selection' }).click();
+    await expect(page.locator('.sel-bar .sel-label')).toHaveText('Section: 2. Widen a selection');
+    await page.keyboard.press('c');
+    const pop = page.locator('.popover');
+    await expect(pop.locator('.pop-loc')).toContainText(`Lines ${lineOf('## 2. Widen a selection')}`);
+    await page.keyboard.press('Escape');
+    await expect(pop).toHaveCount(0);
+
+    const item = page.locator('.toc-item', { hasText: '4. Copy the prompt' });
+    await item.hover();
+    await item.getByRole('button', { name: /Comment on the section/ }).click();
+    await expect(pop).toBeVisible();
+    await expect(pop.locator('.pop-loc')).toContainText(`Lines ${lineOf('## 4. Copy the prompt')}`);
+    await pop.locator('#rp-body').fill('Tighten this section.');
+    await page.keyboard.press('Control+Enter');
+    await expect(page.locator('.card')).toContainText('Tighten this section.');
+  });
+
+  test('open file button: picker success, picker failure with a visible error, and the basic picker', async ({ context, extensionId }) => {
+    const md = readFileSync(fileURLToPath(new URL('../fixtures/sample.md', import.meta.url)), 'utf8');
+    const page = await context.newPage();
+    // A real picker can't be driven headless; stand in with a file from the origin's private storage.
+    await page.addInitScript((text) => {
+      (window as unknown as { showOpenFilePicker: () => Promise<FileSystemFileHandle[]> }).showOpenFilePicker = async () => {
+        if (localStorage.getItem('pickerFails')) throw new DOMException('Picker blocked', 'SecurityError');
+        const dir = await navigator.storage.getDirectory();
+        const h = await dir.getFileHandle('sample.md', { create: true });
+        const w = await h.createWritable();
+        await w.write(text);
+        await w.close();
+        return [h];
+      };
+    }, md);
+    await page.goto(`chrome-extension://${extensionId}/welcome.html`);
+    await page.getByRole('button', { name: 'Open a Markdown file' }).click();
+    await page.waitForURL(/viewer\.html\?file=/);
+    await expect(page.locator('.md h1')).toHaveText('Launch plan');
+
+    await page.goto(`chrome-extension://${extensionId}/welcome.html`);
+    await page.evaluate(() => localStorage.setItem('pickerFails', '1'));
+    await page.getByRole('button', { name: 'Open a Markdown file' }).click();
+    await expect(page.getByRole('alert')).toContainText('SecurityError');
+
+    await page.locator('input[type=file]').setInputFiles({ name: 'notes.md', mimeType: 'text/markdown', buffer: Buffer.from('# Notes\n\nשלום עולם, this came from the basic picker.\n') });
+    await page.waitForURL(/viewer\.html\?upload=/);
+    await expect(page.locator('.md h1')).toHaveText('Notes');
+    await expect(page.locator('.doc-title .t')).toHaveText('notes.md');
+  });
+
   test('raw view comments map to exact source lines; Hebrew too', async ({ context, extensionId }) => {
     const page = await context.newPage();
     await page.goto(`chrome-extension://${extensionId}/viewer.html?demo=1`);
