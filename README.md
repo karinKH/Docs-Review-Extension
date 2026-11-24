@@ -113,4 +113,9 @@ Built with [WXT](https://wxt.dev), React, TypeScript, unified/remark/rehype, Shi
 
 ## License
 
-The license is being finalised. Until a license file says otherwise, **all rights are reserved** by the author: you may read the code here, but you may not copy, modify or redistribute it. See [LICENSE](LICENSE).
+Review Pen is **source-available** under the [PolyForm Shield License 1.0.0](LICENSE). In short, and the license text is what counts:
+
+- **You may** use it for any purpose, including at work, read and change the code, and share copies, as long as you pass on the license and the `Required Notice` line.
+- **You may not** use it to offer a product that competes with Review Pen. That includes selling it, or publishing your own version of it, even for free.
+
+This is not an "open source" license under the Open Source Initiative's definition, because it restricts one kind of use. The libraries Review Pen uses keep their own licenses.
