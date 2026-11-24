@@ -40,6 +40,7 @@ export function Modal({ title, onClose, children, wide }: { title: string; onClo
 }
 
 const SHORTCUTS: [string, string][] = [
+  ['Ctrl/⌘ + K', 'Command palette: any action, section or comment'],
   ['C', 'Comment on the selection'],
   ['Alt + ↑ / Alt + scroll up', 'Widen selection: word, sentence, paragraph, section'],
   ['Alt + ↓ / Alt + scroll down', 'Narrow the selection again'],

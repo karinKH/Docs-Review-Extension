@@ -265,6 +265,13 @@ export function Home() {
       <footer className="home-foot">
         <IconCheck size={14} />
         <span>Private by design: no AI calls, no servers, no analytics. Reviews stay on this device.</span>
+        <span className="home-links">
+          <a href="https://github.com/karinKH/Docs-Review-Extension/blob/main/PRIVACY.md" target="_blank" rel="noopener noreferrer">Privacy policy</a>
+          {' · '}
+          <a href={browser.runtime.getURL('/third-party-notices.txt')} target="_blank" rel="noopener">Open-source licenses</a>
+          {' · '}
+          <a href="https://github.com/karinKH/Docs-Review-Extension" target="_blank" rel="noopener noreferrer">Source code</a>
+        </span>
       </footer>
     </div>
   );

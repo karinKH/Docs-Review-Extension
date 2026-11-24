@@ -1,0 +1,35 @@
+# Runs on every push and pull request: type check, unit tests, build, and the
+# browser tests against the built extension. No secrets are used.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test
+      - name: Package
+        run: npm run zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: review-pen-extension
+          path: .output/*.zip
+          retention-days: 14
