@@ -1,0 +1,204 @@
+schema: review-pen/prompt@1
+document:
+  title: launch.md
+  path: docs/launch.md
+  lineCount: 53
+  fingerprint: 16e0a481dba2a1
+rules:
+  - Change only the targeted text; leave everything else unchanged.
+  - Locate targets by target.exact; use prefix/suffix when exact is not unique; line numbers are hints.
+  - Items with mode "replace" are literal find-and-replace edits.
+  - Items with intent "question" need an answer, not an edit.
+  - Report each item as done, skipped (with reason) or answered.
+directives:
+  - Use a confident, executive tone.
+  - Keep the whole document under 800 words.
+items:
+  - number: 3
+    intent: rewrite
+    priority: nit
+    mode: replace
+    location:
+      startLine: 7
+      endLine: 7
+      headingPath:
+        - Launch plan
+      block: paragraph
+      blockOrdinal: 1
+    target:
+      type: TextQuoteSelector
+      exact: It is a draft and will change.
+      prefix: "covers the **Q3 launch** of the review tool. "
+      suffix: |-
+        
+
+        ## Goals
+
+        We want to reach 500 weekly active
+    occurrences: 1
+    instruction: Drop the hedge.
+    replacement: It is final.
+    references: []
+  - number: 1
+    intent: rewrite
+    priority: must
+    mode: instruction
+    location:
+      startLine: 11
+      endLine: 11
+      headingPath:
+        - Launch plan
+        - Goals
+      block: paragraph
+      blockOrdinal: 1
+    target:
+      type: TextQuoteSelector
+      exact: 500 weekly active teams
+      prefix: |-
+        and will change.
+
+        ## Goals
+
+        We want to reach 
+      suffix: " by the end of the quarter. We want to keep"
+    occurrences: 1
+    instruction: Say 750 and explain why the target went up.
+    replacement: null
+    references: []
+  - number: 2
+    intent: delete
+    priority: suggestion
+    mode: instruction
+    location:
+      startLine: 28
+      endLine: 28
+      headingPath:
+        - Launch plan
+        - Timeline
+      block: paragraph
+      blockOrdinal: 1
+    target:
+      type: TextQuoteSelector
+      exact: We want to keep support tickets low.
+      prefix: |-
+        4 | August 4 |
+
+        The launch date is fixed. 
+      suffix: |-
+        
+
+        ### Risks
+
+        Escaped \*stars\* and an entity
+    occurrences: 2
+    instruction: Delete this text.
+    replacement: null
+    references: []
+  - number: 4
+    intent: expand
+    priority: must
+    mode: instruction
+    location:
+      startLine: 30
+      endLine: 42
+      headingPath:
+        - Launch plan
+        - Timeline
+        - Risks
+      block: document
+      blockOrdinal: null
+    target:
+      type: TextQuoteSelector
+      exact: |-
+        ### Risks
+
+        Escaped \*stars\* and an entity &amp; an `inline code` span, plus math $E = mc^2$.
+
+        ```ts
+        export function hello(name: string) {
+          return `Hello, ${name}`;
+        }
+        ```
+
+        $$
+        \int_0^1 x^2 \, dx = \frac{1}{3}
+        $$
+      prefix: |+
+        fixed. We want to keep support tickets low.
+
+      suffix: |-
+        
+
+        ## סיכום בעברית
+
+        זהו פסקה בעברית. יש בה שני
+    occurrences: 1
+    instruction: "Add two real risks with owners. Merge with #2 if it helps."
+    replacement: null
+    references:
+      - 2
+  - number: 6
+    intent: format
+    priority: nit
+    mode: replace
+    location:
+      startLine: 36
+      endLine: 36
+      headingPath:
+        - Launch plan
+        - Timeline
+        - Risks
+      block: code block
+      blockOrdinal: 1
+    target:
+      type: TextQuoteSelector
+      exact: return `Hello, ${name}`;
+      prefix: "
+
+        ```ts
+
+        export function hello(name: string) {
+
+        \  "
+      suffix: |
+        
+        }
+        ```
+
+        $$
+        \int_0^1 x^2 \, dx = \frac{1}{3}
+        $$
+    occurrences: 1
+    instruction: null
+    replacement: return 'Hello, ' + name;
+    references: []
+  - number: 5
+    intent: question
+    priority: suggestion
+    mode: instruction
+    location:
+      startLine: 46
+      endLine: 46
+      headingPath:
+        - Launch plan
+        - סיכום בעברית
+      block: paragraph
+      blockOrdinal: 1
+    target:
+      type: TextQuoteSelector
+      exact: יש בה שני משפטים
+      prefix: |-
+        $$
+
+        ## סיכום בעברית
+
+        זהו פסקה בעברית. 
+      suffix: |-
+        , ו-English words בתוכה.
+
+        1. פריט ראשון
+        2. פריט
+    occurrences: 1
+    instruction: האם זה נכון?
+    replacement: null
+    references: []

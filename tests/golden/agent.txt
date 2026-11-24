@@ -1,0 +1,115 @@
+# Revision request for `docs/launch.md`
+
+Apply the 6 numbered changes below to `docs/launch.md`.
+
+## Rules
+
+1. Change only the text identified in each item. Leave everything else in the file exactly as it is, including formatting, whitespace and line breaks.
+2. Find each target by its quoted original text. Line numbers refer to the file as reviewed (53 lines). If lines have shifted, trust the quote, not the line number.
+3. If a quote appears more than once, use the occurrence surrounded by the given "text before" and "text after".
+4. "Exact replacement" items are literal: replace the original text with the replacement text character for character. Do not rephrase them.
+5. All other items need your judgment. Apply them only to the quoted text unless the item says otherwise. Keep the document's language, tone and Markdown style.
+6. "Question - do not edit" items need an answer only. Do not change the file for them.
+7. References such as #3 point to other items in this list.
+8. When you finish, reply with one line per item: "#<n> done", "#<n> skipped: <reason>" or "#<n> answer: <answer>".
+
+## Document-wide instructions
+
+- Use a confident, executive tone.
+- Keep the whole document under 800 words.
+
+## Changes
+
+### #3 · Exact replacement · Nit
+
+Location: line 7 · section: Launch plan · paragraph 1 of its section
+
+Replace this text:
+```text
+It is a draft and will change.
+```
+With this text:
+```text
+It is final.
+```
+Note: Drop the hedge.
+
+### #1 · Rewrite · Must fix
+
+Location: line 11 · section: Launch plan > Goals · paragraph 1 of its section
+
+Original text:
+```text
+500 weekly active teams
+```
+Instruction: Say 750 and explain why the target went up.
+
+### #2 · Delete · Suggestion
+
+Location: line 28 · section: Launch plan > Timeline · paragraph 1 of its section
+
+Original text:
+```text
+We want to keep support tickets low.
+```
+This text appears 2 times. Use the occurrence between:
+Text before:
+```text
+4 | August 4 |
+
+The launch date is fixed. 
+```
+Text after:
+```text
+
+
+### Risks
+
+Escaped \*stars\* and an entity
+```
+Instruction: Delete this text.
+
+### #4 · Expand · Must fix
+
+Location: lines 30-42 · section: Launch plan > Timeline > Risks · whole section
+
+Original text:
+````text
+### Risks
+
+Escaped \*stars\* and an entity &amp; an `inline code` span, plus math $E = mc^2$.
+
+```ts
+export function hello(name: string) {
+  return `Hello, ${name}`;
+}
+```
+
+$$
+\int_0^1 x^2 \, dx = \frac{1}{3}
+$$
+````
+Instruction: Add two real risks with owners. Merge with #2 if it helps.
+
+### #6 · Exact replacement · Nit
+
+Location: line 36 · section: Launch plan > Timeline > Risks · code block 1 of its section
+
+Replace this text:
+```text
+return `Hello, ${name}`;
+```
+With this text:
+```text
+return 'Hello, ' + name;
+```
+
+### #5 · Question - do not edit · Suggestion
+
+Location: line 46 · section: Launch plan > סיכום בעברית · paragraph 1 of its section
+
+Original text:
+```text
+יש בה שני משפטים
+```
+Instruction: האם זה נכון?
