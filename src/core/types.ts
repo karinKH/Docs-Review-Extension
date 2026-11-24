@@ -94,12 +94,50 @@ export interface Annotation {
   /** Literal replacement text (replace mode only). */
   replacement: string;
   status: Status;
+  /** How the comment was found again after the latest change to the document. */
+  match?: MatchInfo;
+  /** What the AI said about this item ("done", "skipped: …", an answer), pasted back by the reviewer. */
+  aiReply?: string;
   createdAt: number;
   updatedAt: number;
 }
 
+/**
+ * unchanged: the quoted text is still there, in the same place.
+ * moved: the same text, somewhere else.
+ * changed: the place was found, but its text was edited (often: the AI did the change).
+ * uncertain: a likely place was found, but the reviewer should confirm it.
+ * lost: the text is gone (for a Delete comment, that usually means done).
+ */
+export const MATCH_STATES = ['unchanged', 'moved', 'changed', 'uncertain', 'lost'] as const;
+export type MatchState = (typeof MATCH_STATES)[number];
+
+export interface MatchInfo {
+  state: MatchState;
+  /** 0 to 1. */
+  confidence: number;
+  /** The round in which this match was computed. */
+  round: number;
+  /** The quoted text before the change, when it differs from the current quote. */
+  previousExact?: string;
+}
+
+/** One version of the document. Round 1 is the version first reviewed. */
+export interface Round {
+  number: number;
+  at: number;
+  source: string;
+  fingerprint: string;
+  /** Changes compared with the previous round that no open comment asked for. */
+  unrequested?: number;
+  /** Changed regions compared with the previous round. */
+  changes?: number;
+}
+
+export const MAX_ROUNDS = 20;
+
 export interface Session {
-  schema: 'review-pen/session@1';
+  schema: 'review-pen/session@2';
   id: string;
   /** Normalised identity of the document (see doc-key.ts). */
   docKey: string;
@@ -114,6 +152,8 @@ export interface Session {
   nextNumber: number;
   /** Heading ids (slugs) the reviewer marked as reviewed. */
   reviewed: string[];
+  /** Versions of the document, oldest first. The last one is the current source. */
+  rounds: Round[];
   createdAt: number;
   updatedAt: number;
 }

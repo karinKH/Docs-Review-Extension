@@ -83,6 +83,10 @@ export interface ItemView {
   mode: 'instruction' | 'replace';
   isReplace: boolean;
   status: Status;
+  /** Asked for in an earlier round but not applied correctly. */
+  isRetry: boolean;
+  /** What the AI said about this item last time, if pasted back. */
+  aiReply: string;
   startLine: number;
   endLine: number;
   lines: string;
@@ -157,6 +161,8 @@ function toItem(a: Annotation, source: string): ItemView {
     mode: a.mode,
     isReplace: a.mode === 'replace',
     status: a.status,
+    isRetry: a.status === 'retry',
+    aiReply: a.aiReply ?? '',
     startLine: an.startLine,
     endLine: an.endLine,
     lines: an.startLine === an.endLine ? `${an.startLine}` : `${an.startLine}-${an.endLine}`,
@@ -275,6 +281,7 @@ function agentPreset(m: PromptModel): string {
     } else {
       out.push(`Instruction: ${it.instruction}`);
     }
+    if (it.isRetry) out.push(`Second attempt: this change was requested before and was not applied correctly${it.aiReply ? ` (your last reply: "${it.aiReply}")` : ''}. Apply it now.`);
   }
   return out.join('\n') + '\n';
 }
@@ -338,6 +345,7 @@ function chatPreset(m: PromptModel, options: CompileOptions): string {
     } else {
       out.push(xmlText('instruction', it.instruction));
     }
+    if (it.isRetry) out.push(xmlText('second_attempt', `Requested before and not applied correctly${it.aiReply ? ` (last reply: "${it.aiReply}")` : ''}. Apply it now.`));
     out.push('</comment>');
   }
   out.push('</comments>');
@@ -374,6 +382,7 @@ function structured(m: PromptModel) {
       instruction: it.instruction || null,
       replacement: it.isReplace ? it.replacement : null,
       references: it.references,
+      ...(it.isRetry ? { secondAttempt: true, previousReply: it.aiReply || null } : {}),
     })),
   };
 }
