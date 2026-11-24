@@ -30,7 +30,8 @@ Select a word, a sentence, a paragraph or a whole section. Say what should chang
 - **Annotated PDF.** **Ctrl+P** (or More ▸ Annotated PDF) prints a copy with each comment's text marked, its number in superscript, a callout box with the comment after the paragraph, and a cover page with a summary and an index. Choose **Save as PDF** in Chrome's print dialog.
 - **Review files.** Save the whole review (comments, instructions, rounds) as a `.review.json` file to keep or share, and open it again later, on another computer too. Comments can also be exported as [W3C Web Annotations](https://www.w3.org/TR/annotation-model/). The prompt can be saved as a file.
 - **Google Docs, Sheets and Slides.** Click the Review Pen button in Chrome's toolbar while a Google file is open (or paste its link on the welcome page). Review Pen downloads Google's own export of that one file with your existing Google sign-in and converts it on your computer: Docs as Markdown, Sheets as one table per tab with row numbers and column letters (a comment on a cell names it in the prompt, for example `Budget!B7`, and formulas are listed), Slides as an outline with one section per slide and the speaker notes. It is a copy: you apply the changes in Google yourself (or paste the AI's revised text), and **Reload** fetches the new version as the next round. Review Pen does not draw on the Google page itself.
-- **Keyboard first.** Press **?** in the viewer for every shortcut.
+- **Keyboard first.** **Ctrl+K** opens a command palette: type to run any action, jump to a section, or find a comment. Press **?** in the viewer for every shortcut.
+- **Accessible.** Every control has a label, menus and dialogs work with the keyboard, and colours meet WCAG AA contrast in light and dark themes (checked automatically with axe on every test run).
 
 ## Install (from source, for now)
 
@@ -55,6 +56,7 @@ Review Pen is not on the Chrome Web Store yet. To try it:
 
 | Keys | Action |
 | --- | --- |
+| Ctrl/⌘ + K | Command palette |
 | C | Comment on the selection |
 | Alt + ↑ / Alt + scroll up | Widen the selection: word, sentence, paragraph, section, document |
 | Alt + ↓ / Alt + scroll down | Narrow it again |
@@ -122,7 +124,11 @@ Built with [WXT](https://wxt.dev), React, TypeScript, unified/remark/rehype, Shi
 1. **Markdown reviewer** (done): viewer, anchoring, comments, prompt compiler, local storage.
 2. **Review loop and exports** (done): fuzzy re-anchoring, review rounds with a scope guard, the AI's checklist reply, exact text without AI, annotated PDF, review files, live file watching. Voice comments are left out on purpose: Chrome's built-in speech recognition sends audio to Google's servers, which breaks the promise that nothing leaves your browser.
 3. **Google Workspace** (done, as an import): Docs, Sheets and Slides open as a reviewable copy through Google's own export and your existing sign-in. Not done, on purpose: drawing comments directly on the Google page. Docs and Slides draw their content on a canvas, so it would mean reading Google's private, changing page internals, which breaks often and needs broad access to your Google pages.
-4. **Polish and release:** accessibility audit, more languages, Chrome Web Store listing.
+4. **Polish and release** (done, apart from translation): accessibility checks, command palette, [privacy policy](PRIVACY.md), [store listing draft](docs/STORE_LISTING.md), third-party notices, CI. Not done yet: a Hebrew (and other languages) interface. Documents in any language already work; the buttons and menus are English only.
+
+## Open-source software
+
+Review Pen is built on open-source libraries. Their licenses are collected in [`public/third-party-notices.txt`](public/third-party-notices.txt), which ships inside the extension (welcome page ▸ Open-source licenses). Regenerate it with `npm run notices` after changing dependencies.
 
 ## License
 

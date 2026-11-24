@@ -13,7 +13,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "npm run build && playwright test"
+    "test:e2e": "npm run build && playwright test",
+    "notices": "node scripts/third-party-notices.mjs"
   },
   "dependencies": {
     "@shikijs/langs": "4.6.0",
@@ -42,6 +43,7 @@
     "yaml": "2.9.1"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.11.0",
     "@playwright/test": "1.63.0",
     "@types/hast": "3.0.5",
     "@types/jsdom": "30.0.0",

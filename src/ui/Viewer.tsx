@@ -36,6 +36,7 @@ import { CommentPopover, type CommentDraft } from './components/CommentPopover';
 import { ReviewPanel, type PanelTab } from './components/ReviewPanel';
 import { ChoiceDialog, PasteDialog, SettingsDialog, ShortcutsDialog } from './components/Dialogs';
 import type { MenuItem } from './components/Header';
+import { CommandPalette, type Command } from './components/CommandPalette';
 import { IconComment, IconExpand, IconPlus, IconShrink, IconWarn, IconX } from './components/Icons';
 
 interface Props {
@@ -50,7 +51,7 @@ interface Props {
   watching?: boolean;
 }
 
-type DialogKind = 'settings' | 'shortcuts' | 'paste-reply' | 'paste-version' | 'apply';
+type DialogKind = 'settings' | 'shortcuts' | 'paste-reply' | 'paste-version' | 'apply' | 'palette';
 
 type Rect = { top: number; bottom: number; left: number; right: number };
 
@@ -672,6 +673,33 @@ export function Viewer({ source, identity, onReload, onNewSource, onWriteFile, w
     [printPdf, savePrompt, saveReviewFile, openReviewFile, exportWebAnnotations, exactCount, onNewSource, openPanelTab],
   );
 
+  const commands: Command[] = useMemo(() => {
+    if (!session) return [];
+    const list: Command[] = [
+      { id: 'copy', label: 'Copy prompt', group: 'Actions', hint: 'Ctrl+Shift+C', run: copyPrompt },
+      ...menu.filter((m) => !m.disabled).map((m, i) => ({ id: `menu-${i}`, label: m.label.replace(/ \(Ctrl\+P\)$/, ''), group: 'Actions' as const, hint: m.label.includes('Ctrl+P') ? 'Ctrl+P' : undefined, run: m.onSelect })),
+      { id: 'view', label: view === 'rendered' ? 'Show raw Markdown' : 'Show rendered document', group: 'Actions', hint: 'R', run: () => switchView(view === 'rendered' ? 'raw' : 'rendered') },
+      { id: 'toc', label: settings.tocOpen ? 'Hide contents' : 'Show contents', group: 'Actions', hint: 'T', run: () => updateSettings({ tocOpen: !settings.tocOpen }) },
+      { id: 'panel', label: settings.panelOpen ? 'Hide review panel' : 'Show review panel', group: 'Actions', run: () => updateSettings({ panelOpen: !settings.panelOpen }) },
+      { id: 'tab-comments', label: 'Open comments', group: 'Actions', run: () => openPanelTab('comments') },
+      { id: 'tab-prompt', label: 'Open prompt', group: 'Actions', hint: 'P', run: () => openPanelTab('prompt') },
+      { id: 'theme-light', label: 'Theme: light', group: 'Actions', run: () => updateSettings({ theme: 'light' }) },
+      { id: 'theme-dark', label: 'Theme: dark', group: 'Actions', run: () => updateSettings({ theme: 'dark' }) },
+      { id: 'theme-auto', label: 'Theme: follow system', group: 'Actions', run: () => updateSettings({ theme: 'auto' }) },
+      { id: 'undo', label: 'Undo', group: 'Actions', hint: 'Ctrl+Z', run: undo },
+      { id: 'redo', label: 'Redo', group: 'Actions', hint: 'Ctrl+Shift+Z', run: redo },
+      { id: 'shortcuts', label: 'Keyboard shortcuts', group: 'Actions', hint: '?', run: () => setDialog('shortcuts') },
+      { id: 'settings', label: 'Settings', group: 'Actions', run: () => setDialog('settings') },
+    ];
+    if (onReload) list.push({ id: 'reload', label: 'Reload the file', group: 'Actions', run: onReload });
+    for (const e of rendered.outline) list.push({ id: `sec-${e.slug}`, label: `${'  '.repeat(Math.max(0, e.depth - 1))}${e.text}`, group: 'Sections', run: () => jumpToEntry(e) });
+    for (const a of inDocumentOrder(session.annotations)) {
+      const text = (a.body || a.replacement || a.anchor.exact).replace(/\s+/g, ' ').slice(0, 80);
+      list.push({ id: `c-${a.id}`, label: `#${a.number} ${text}`, group: 'Comments', run: () => { openPanelTab('comments'); selectAnnotation(a); } });
+    }
+    return list;
+  }, [session, menu, copyPrompt, view, switchView, settings.tocOpen, settings.panelOpen, updateSettings, openPanelTab, undo, redo, onReload, rendered.outline, jumpToEntry, selectAnnotation]);
+
   // ---------- keyboard ----------
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -689,6 +717,11 @@ export function Viewer({ source, identity, onReload, onNewSource, onWriteFile, w
         // Ctrl+P prints the annotated version instead of the app screen.
         e.preventDefault();
         if (!composer && !dialog) printPdf();
+        return;
+      }
+      if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        if (!composer) setDialog((d) => (d === 'palette' ? null : d ?? 'palette'));
         return;
       }
       if (isTyping(e.target) || composer || dialog) return;
@@ -1019,6 +1052,7 @@ export function Viewer({ source, identity, onReload, onNewSource, onWriteFile, w
       ) : null}
 
       {dialog === 'shortcuts' ? <ShortcutsDialog onClose={() => setDialog(null)} /> : null}
+      {dialog === 'palette' ? <CommandPalette commands={commands} onClose={() => setDialog(null)} /> : null}
       {dialog === 'settings' ? <SettingsDialog settings={settings} onChange={updateSettings} onClose={() => setDialog(null)} /> : null}
       {dialog === 'paste-reply' ? (
         <PasteDialog
