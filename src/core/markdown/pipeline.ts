@@ -75,6 +75,30 @@ const BLOCK_KINDS = new Set<string>([
   'yaml',
 ]);
 
+const RTL_CHARS = /[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF]/g;
+const LTR_CHARS = /[A-Za-z\u00C0-\u024F\u0370-\u03FF\u0400-\u04FF]/g;
+
+/**
+ * Text direction by majority of strong characters. The browser's dir="auto"
+ * uses only the first strong character, which turns a Hebrew paragraph that
+ * starts with an English name ("Claude Code עוזר...") left-to-right.
+ */
+export function directionOf(text: string): 'rtl' | 'ltr' | 'auto' {
+  const rtl = text.match(RTL_CHARS)?.length ?? 0;
+  const ltr = text.match(LTR_CHARS)?.length ?? 0;
+  if (rtl === 0 && ltr === 0) return 'auto';
+  return rtl > ltr ? 'rtl' : 'ltr';
+}
+
+function textOf(node: Element | HRoot): string {
+  let out = '';
+  for (const c of node.children) {
+    if (c.type === 'text') out += c.value;
+    else if (c.type === 'element') out += textOf(c);
+  }
+  return out;
+}
+
 const DIR_AUTO_TAGS = new Set([
   'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'td', 'th', 'blockquote', 'dt', 'dd',
   'summary', 'figcaption', 'caption',
@@ -214,7 +238,7 @@ function rehypeSourceMap(options: { source: string }) {
           props.dataSp = sp;
           cursor = Math.max(cursor, Number(sp.split(':')[1]));
         }
-        if (DIR_AUTO_TAGS.has(el.tagName)) props.dir = 'auto';
+        if (DIR_AUTO_TAGS.has(el.tagName)) props.dir = directionOf(textOf(el));
 
         if (el.tagName === 'pre' && sp) {
           const code = el.children.find((c): c is Element => c.type === 'element' && c.tagName === 'code');
@@ -371,7 +395,7 @@ export function renderMarkdown(source: string, options: RenderOptions = {}): Ren
     .use(rehypeSourceMap, { source })
     .use(rehypeSanitize, sanitizeSchema)
     .use(rehypeCallouts)
-    .use(rehypeKatex, { throwOnError: false, strict: false, trust: false, output: 'htmlAndMathml' })
+    .use(rehypeKatex, { throwOnError: false, strict: false, trust: false, output: 'htmlAndMathml' } as Parameters<typeof rehypeKatex>[0])
     .use(rehypeFinalize, { outline, baseUrl: options.baseUrl, remoteImages });
 
   // structuredClone keeps the parsed tree untouched (runSync mutates in place).

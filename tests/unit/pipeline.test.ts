@@ -64,7 +64,14 @@ describe('markdown pipeline', () => {
     expect(r.root.querySelector('.callout-warning .callout-title')?.textContent).toBe('Warning');
     expect(r.root.querySelectorAll('.katex').length).toBeGreaterThanOrEqual(2);
     const hebrew = Array.from(r.root.querySelectorAll('p')).find((p) => p.textContent?.includes('זהו'))!;
-    expect(hebrew.getAttribute('dir')).toBe('auto');
+    expect(hebrew.getAttribute('dir')).toBe('rtl');
+    const english = Array.from(r.root.querySelectorAll('p')).find((p) => p.textContent?.includes('This plan covers'))!;
+    expect(english.getAttribute('dir')).toBe('ltr');
+  });
+
+  test('direction follows the majority of letters, not the first one', () => {
+    const x = renderToDom('Claude Code עוזר לכתוב מסמכים ארוכים בעברית.\n');
+    expect(x.root.querySelector('p')!.getAttribute('dir')).toBe('rtl');
   });
 
   test('javascript: links are removed', () => {

@@ -21,8 +21,8 @@ import { approxTokens } from './tokens';
 export type PresetId = 'agent' | 'chat' | 'json' | 'yaml' | 'custom';
 
 export const PRESET_LABELS: Record<PresetId, string> = {
-  agent: 'Coding agent (Claude Code, Cursor)',
-  chat: 'Chat model (Claude, ChatGPT, Gemini)',
+  agent: 'Coding agent (Markdown)',
+  chat: 'Chat assistant (XML)',
   json: 'JSON',
   yaml: 'YAML',
   custom: 'Custom template',

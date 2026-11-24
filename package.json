@@ -16,6 +16,8 @@
     "test:e2e": "npm run build && playwright test"
   },
   "dependencies": {
+    "@shikijs/langs": "4.6.0",
+    "@shikijs/themes": "4.6.0",
     "dexie": "4.4.7",
     "github-slugger": "2.0.0",
     "hast-util-to-jsx-runtime": "2.3.7",
@@ -40,6 +42,7 @@
   "devDependencies": {
     "@playwright/test": "1.63.0",
     "@types/hast": "3.0.5",
+    "@types/jsdom": "30.0.0",
     "@types/mdast": "4.0.4",
     "@types/node": "26.6.6",
     "@types/react": "19.3.1",
@@ -53,5 +56,8 @@
   },
   "overrides": {
     "katex": "0.19.1"
+  },
+  "engines": {
+    "node": ">=22.12"
   }
 }

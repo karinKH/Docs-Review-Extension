@@ -5,5 +5,13 @@
     "noUncheckedIndexedAccess": true,
     "jsx": "react-jsx"
   },
-  "include": ["src", "tests", "wxt.config.ts", "vitest.config.ts", "playwright.config.ts"]
+  "include": [
+    ".wxt/wxt.d.ts",
+    "src",
+    "tests",
+    "wxt.config.ts",
+    "vitest.config.ts",
+    "playwright.config.ts",
+    "scripts"
+  ]
 }
