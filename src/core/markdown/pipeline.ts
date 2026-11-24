@@ -99,10 +99,35 @@ function textOf(node: Element | HRoot): string {
   return out;
 }
 
+// Containers get a direction too, so a Hebrew table puts its first column on
+// the right and a Hebrew list puts its bullets and indent on the right.
 const DIR_AUTO_TAGS = new Set([
   'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'td', 'th', 'blockquote', 'dt', 'dd',
-  'summary', 'figcaption', 'caption',
+  'summary', 'figcaption', 'caption', 'table', 'ul', 'ol', 'dl',
 ]);
+
+// A list or table takes the direction most of its items have, so one long
+// English item does not flip a Hebrew list. Ties fall back to letter counts.
+const CONTAINER_ITEMS: Record<string, string[]> = { ul: ['li'], ol: ['li'], dl: ['dt', 'dd'], table: ['td', 'th'] };
+
+function containerDirection(el: Element): 'rtl' | 'ltr' | 'auto' {
+  const tags = CONTAINER_ITEMS[el.tagName]!;
+  let rtl = 0;
+  let ltr = 0;
+  const walk = (node: Element, depth: number) => {
+    for (const c of node.children) {
+      if (c.type !== 'element') continue;
+      if (tags.includes(c.tagName)) {
+        const d = directionOf(textOf(c));
+        if (d === 'rtl') rtl++;
+        else if (d === 'ltr') ltr++;
+      } else if (el.tagName === 'table' && depth < 3) walk(c, depth + 1); // thead/tbody/tr
+    }
+  };
+  walk(el, 0);
+  if (rtl !== ltr) return rtl > ltr ? 'rtl' : 'ltr';
+  return directionOf(textOf(el));
+}
 
 const sanitizeSchema = (() => {
   const s = structuredClone(defaultSchema);
@@ -238,7 +263,7 @@ function rehypeSourceMap(options: { source: string }) {
           props.dataSp = sp;
           cursor = Math.max(cursor, Number(sp.split(':')[1]));
         }
-        if (DIR_AUTO_TAGS.has(el.tagName)) props.dir = directionOf(textOf(el));
+        if (DIR_AUTO_TAGS.has(el.tagName)) props.dir = CONTAINER_ITEMS[el.tagName] ? containerDirection(el) : directionOf(textOf(el));
 
         if (el.tagName === 'pre' && sp) {
           const code = el.children.find((c): c is Element => c.type === 'element' && c.tagName === 'code');

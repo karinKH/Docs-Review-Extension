@@ -74,6 +74,15 @@ describe('markdown pipeline', () => {
     expect(x.root.querySelector('p')!.getAttribute('dir')).toBe('rtl');
   });
 
+  test('Hebrew tables and lists get a right-to-left direction as a whole', () => {
+    const x = renderToDom('| שלב | תאריך |\n| --- | --- |\n| עיצוב | 15.02.2027 |\n\n- פריט ראשון\n- Second item, in English\n- פריט שלישי\n\n| Step | Date |\n| --- | --- |\n| Design | 15.02.2027 |\n');
+    const [heTable, enTable] = Array.from(x.root.querySelectorAll('table'));
+    expect(heTable!.getAttribute('dir')).toBe('rtl');
+    expect(enTable!.getAttribute('dir')).toBe('ltr');
+    expect(x.root.querySelector('ul')!.getAttribute('dir')).toBe('rtl');
+    expect(x.root.querySelectorAll('li')[1]!.getAttribute('dir')).toBe('ltr');
+  });
+
   test('javascript: links are removed', () => {
     const x = renderToDom('[bad](javascript:alert(1)) <a href="javascript:alert(2)">x</a>');
     expect(x.html).not.toContain('javascript:');
