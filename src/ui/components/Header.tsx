@@ -1,5 +1,79 @@
+import { useEffect, useRef, useState } from 'react';
 import type { Theme } from '../lib/settings';
-import { IconAuto, IconCopy, IconKeyboard, IconMoon, IconPanel, IconPen, IconRedo, IconRefresh, IconSettings, IconSun, IconToc, IconUndo } from './Icons';
+import { IconAuto, IconCopy, IconKeyboard, IconMoon, IconMore, IconPanel, IconPen, IconRedo, IconRefresh, IconSettings, IconSun, IconToc, IconUndo } from './Icons';
+
+export interface MenuItem {
+  label: string;
+  onSelect: () => void;
+  disabled?: boolean;
+  /** Draws a separator above this item. */
+  separator?: boolean;
+}
+
+/** A small accessible drop-down menu (arrow keys, Esc, click outside). */
+function Menu({ items }: { items: MenuItem[] }) {
+  const [open, setOpen] = useState(false);
+  const btn = useRef<HTMLButtonElement>(null);
+  const list = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    list.current?.querySelector<HTMLButtonElement>('[role="menuitem"]:not(:disabled)')?.focus();
+    const onDown = (e: MouseEvent) => {
+      if (!list.current?.contains(e.target as Node) && !btn.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [open]);
+  const close = () => {
+    setOpen(false);
+    btn.current?.focus();
+  };
+  return (
+    <div className="menu-wrap">
+      <button ref={btn} type="button" className={`icon-btn${open ? ' on' : ''}`} title="More: export, PDF, review files" aria-label="More actions" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        <IconMore />
+      </button>
+      {open ? (
+        <div
+          ref={list}
+          className="menu"
+          role="menu"
+          aria-label="More actions"
+          onKeyDown={(e) => {
+            const items = [...(list.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)') ?? [])];
+            const i = items.indexOf(document.activeElement as HTMLButtonElement);
+            if (e.key === 'Escape') {
+              e.stopPropagation();
+              close();
+            } else if (e.key === 'ArrowDown') {
+              e.preventDefault();
+              items[(i + 1) % items.length]?.focus();
+            } else if (e.key === 'ArrowUp') {
+              e.preventDefault();
+              items[(i - 1 + items.length) % items.length]?.focus();
+            } else if (e.key === 'Tab') setOpen(false);
+          }}
+        >
+          {items.map((it) => (
+            <button
+              key={it.label}
+              type="button"
+              role="menuitem"
+              className={`menu-item${it.separator ? ' sep' : ''}`}
+              disabled={it.disabled}
+              onClick={() => {
+                close();
+                it.onSelect();
+              }}
+            >
+              {it.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 interface Props {
   title: string;
@@ -21,6 +95,7 @@ interface Props {
   onCopy: () => void;
   onReload?: () => void;
   openCount: number;
+  menu: MenuItem[];
 }
 
 const NEXT_THEME: Record<Theme, Theme> = { auto: 'light', light: 'dark', dark: 'auto' };
@@ -53,6 +128,7 @@ export function Header(p: Props) {
         <button type="button" className="icon-btn" title={`Theme: ${p.theme}`} aria-label={`Theme: ${p.theme}`} onClick={() => p.onTheme(NEXT_THEME[p.theme])}><ThemeIcon /></button>
         <button type="button" className="icon-btn" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts" onClick={p.onShortcuts}><IconKeyboard /></button>
         <button type="button" className="icon-btn" title="Settings" aria-label="Settings" onClick={p.onSettings}><IconSettings /></button>
+        <Menu items={p.menu} />
         <button type="button" className="btn btn-primary" onClick={p.onCopy} disabled={p.openCount === 0} title="Copy prompt (Ctrl+Shift+C)">
           <IconCopy size={15} /> Copy prompt
           {p.openCount ? <span className="btn-count">{p.openCount}</span> : null}

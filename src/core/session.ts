@@ -11,7 +11,7 @@ export function newId(): string {
 export function createSession(input: { docKey: string; title: string; filePath: string; source: string; now?: number }): Session {
   const now = input.now ?? Date.now();
   return {
-    schema: 'review-pen/session@1',
+    schema: 'review-pen/session@2',
     id: newId(),
     docKey: input.docKey,
     title: input.title,
@@ -22,6 +22,7 @@ export function createSession(input: { docKey: string; title: string; filePath: 
     annotations: [],
     nextNumber: 1,
     reviewed: [],
+    rounds: [{ number: 1, at: now, source: input.source, fingerprint: fingerprint(input.source) }],
     createdAt: now,
     updatedAt: now,
   };
@@ -92,4 +93,12 @@ export function referencedNumbers(text: string): number[] {
 /** Document order: by start offset, then by number. Deterministic. */
 export function inDocumentOrder(list: Annotation[]): Annotation[] {
   return [...list].sort((a, b) => a.anchor.start - b.anchor.start || a.anchor.end - b.anchor.end || a.number - b.number);
+}
+
+/** Brings a stored session of any earlier schema up to the current one. */
+export function migrateSession(raw: unknown): Session {
+  const s = raw as Session & { schema: string };
+  if (s.schema === 'review-pen/session@2') return { ...s, rounds: s.rounds?.length ? s.rounds : [{ number: 1, at: s.createdAt, source: s.source, fingerprint: s.sourceFingerprint }] };
+  // @1 had no rounds.
+  return { ...s, schema: 'review-pen/session@2', rounds: [{ number: 1, at: s.createdAt, source: s.source, fingerprint: s.sourceFingerprint }] };
 }

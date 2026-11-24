@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { browser } from 'wxt/browser';
-import { loadFromParams, loadPicked, type LoadResult } from './lib/load-source';
-import { handoffKey } from '../core/handoff';
+import { loadFromParams, loadPicked, MAX_BYTES, type LoadResult } from './lib/load-source';
+import { handoffKey, uploadKey, type Upload } from '../core/handoff';
+import { getHandle } from './lib/db';
 import { applyTheme, useSettings } from './lib/settings';
 import { Viewer } from './Viewer';
 import { Home } from './Home';
@@ -28,6 +29,83 @@ export function ViewerApp() {
     void loadFromParams(params).then(setState);
   }, [params]);
 
+  /** A new version of the same document: the viewer starts a review round. */
+  const acceptSource = useCallback(
+    (text: string) => {
+      setState((s) => (s.kind === 'ok' && s.source !== text ? { ...s, source: text } : s));
+      // A file opened with the basic picker lives in session storage: keep it current.
+      const up = params.get('upload');
+      if (up) {
+        const key = uploadKey(up);
+        void browser.storage.session.get(key).then((r) => {
+          const prev = r[key] as Upload | undefined;
+          if (prev) void browser.storage.session.set({ [key]: { ...prev, text, at: Date.now() } satisfies Upload });
+        });
+      }
+    },
+    [params],
+  );
+
+  // Live file watching for files opened with "Open file": when the AI (or you)
+  // saves the file, the new version arrives here within about two seconds.
+  // Reading needs the permission you already gave; nothing is sent anywhere.
+  const fileId = params.get('file');
+  const lastSeen = useRef<{ modified: number; size: number } | null>(null);
+  const isFile = state.kind === 'ok' && state.origin === 'file';
+  useEffect(() => {
+    if (!isFile || !fileId) return;
+    let alive = true;
+    let busy = false;
+    const check = async () => {
+      if (busy || document.visibilityState !== 'visible') return;
+      busy = true;
+      try {
+        const rec = await getHandle(fileId);
+        if (!rec || (await rec.handle.queryPermission({ mode: 'read' })) !== 'granted') return;
+        const f = await rec.handle.getFile();
+        const seen = { modified: f.lastModified, size: f.size };
+        const prev = lastSeen.current;
+        lastSeen.current = seen;
+        if (!prev || (prev.modified === seen.modified && prev.size === seen.size) || f.size > MAX_BYTES) return;
+        const text = await f.text();
+        if (alive) acceptSource(text);
+      } catch {
+        /* moved or deleted: keep showing the last version */
+      } finally {
+        busy = false;
+      }
+    };
+    void check();
+    const t = window.setInterval(() => void check(), 2000);
+    const onVis = () => void check();
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      alive = false;
+      window.clearInterval(t);
+      document.removeEventListener('visibilitychange', onVis);
+    };
+  }, [isFile, fileId, acceptSource]);
+
+  /** Writes text back to a file opened with "Open file". Asks Chrome for write permission first. */
+  const writeFile = useCallback(
+    async (text: string): Promise<boolean> => {
+      if (!fileId) return false;
+      const rec = await getHandle(fileId);
+      if (!rec) return false;
+      const opts = { mode: 'readwrite' } as const;
+      let p = await rec.handle.queryPermission(opts);
+      if (p !== 'granted') p = await rec.handle.requestPermission(opts);
+      if (p !== 'granted') return false;
+      const w = await rec.handle.createWritable();
+      await w.write(text);
+      await w.close();
+      const f = await rec.handle.getFile();
+      lastSeen.current = { modified: f.lastModified, size: f.size };
+      return true;
+    },
+    [fileId],
+  );
+
   const reload = useCallback(async () => {
     if (state.kind !== 'ok') return;
     const src = params.get('src');
@@ -50,7 +128,17 @@ export function ViewerApp() {
     case 'home':
       return <Home />;
     case 'ok':
-      return <Viewer key={state.identity.docKey} source={state.source} identity={state.identity} onReload={state.reloadable ? () => void reload() : undefined} />;
+      return (
+        <Viewer
+          key={state.identity.docKey}
+          source={state.source}
+          identity={state.identity}
+          onReload={state.reloadable ? () => void reload() : undefined}
+          onNewSource={acceptSource}
+          onWriteFile={state.origin === 'file' ? writeFile : undefined}
+          watching={state.origin === 'file'}
+        />
+      );
     case 'needs-file-permission':
       return (
         <Centered title={`Open ${state.name}`}>

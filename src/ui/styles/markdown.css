@@ -150,3 +150,5 @@
 ::highlight(rp-nit) { background-color: var(--nit-hl); }
 ::highlight(rp-active) { background-color: var(--active-hl); }
 ::highlight(rp-flash) { background-color: var(--active-hl); }
+::highlight(rp-change) { background-color: color-mix(in srgb, var(--success) 20%, transparent); }
+::highlight(rp-unreq) { background-color: color-mix(in srgb, var(--warn) 24%, transparent); text-decoration: underline wavy var(--warn); }

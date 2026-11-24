@@ -1,3 +1,4 @@
+import { migrateSession } from '../../core/session';
 // Local storage for review sessions and opened-file handles (IndexedDB via Dexie).
 // Nothing here ever leaves the browser.
 
@@ -33,7 +34,8 @@ class ReviewDB extends Dexie {
 export const db = new ReviewDB();
 
 export async function loadSession(docKey: string): Promise<Session | undefined> {
-  return db.sessions.get(docKey);
+  const s = await db.sessions.get(docKey);
+  return s ? migrateSession(s) : undefined;
 }
 
 export async function saveSession(s: Session): Promise<void> {
@@ -41,7 +43,7 @@ export async function saveSession(s: Session): Promise<void> {
 }
 
 export async function listSessions(): Promise<Session[]> {
-  return db.sessions.orderBy('updatedAt').reverse().toArray();
+  return (await db.sessions.orderBy('updatedAt').reverse().toArray()).map(migrateSession);
 }
 
 export async function deleteSession(docKey: string): Promise<void> {
