@@ -49,6 +49,7 @@ const SHORTCUTS: [string, string][] = [
   ['T', 'Show or hide the table of contents'],
   ['P', 'Open the prompt'],
   ['Ctrl/⌘ + Shift + C', 'Copy the prompt'],
+  ['Ctrl/⌘ + P', 'Annotated PDF (print, then “Save as PDF”)'],
   ['Ctrl/⌘ + Z', 'Undo'],
   ['Ctrl/⌘ + Shift + Z', 'Redo'],
   ['Ctrl/⌘ + Enter', 'Save a comment'],
@@ -116,6 +117,76 @@ export function SettingsDialog({ settings, onChange, onClose }: { settings: Sett
         <p className="muted small privacy-note">
           Review Pen works entirely in your browser. It makes no AI calls, sends no analytics and stores your reviews only on this device.
         </p>
+      </div>
+    </Modal>
+  );
+}
+
+/** A dialog with a large text box, for pasting an AI reply or a revised document. */
+export function PasteDialog({
+  title,
+  intro,
+  placeholder,
+  submitLabel,
+  preview,
+  onSubmit,
+  onClose,
+}: {
+  title: string;
+  intro: ReactNode;
+  placeholder: string;
+  submitLabel: string;
+  /** A plain-language summary of what will happen, or an error (ok: false). */
+  preview: (text: string) => { ok: boolean; message: string } | null;
+  onSubmit: (text: string) => void;
+  onClose: () => void;
+}) {
+  const [text, setText] = useState('');
+  const info = text.trim() ? preview(text) : null;
+  return (
+    <Modal title={title} onClose={onClose} wide>
+      <div className="paste-dialog">
+        <div className="muted small">{intro}</div>
+        <textarea
+          className="input mono"
+          rows={14}
+          dir="auto"
+          value={text}
+          placeholder={placeholder}
+          aria-label={title}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && info?.ok) onSubmit(text);
+          }}
+          spellCheck={false}
+        />
+        {info ? <p className={`small ${info.ok ? '' : 'error-text'}`} role="status">{info.message}</p> : null}
+        <div className="modal-foot">
+          <button type="button" className="btn btn-sm" onClick={onClose}>Cancel</button>
+          <button type="button" className="btn btn-primary btn-sm" disabled={!info?.ok} onClick={() => onSubmit(text)}>
+            {submitLabel}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+/** A short explanation with a few choices. */
+export function ChoiceDialog({ title, children, actions, onClose }: { title: string; children: ReactNode; actions: { label: string; primary?: boolean; onClick: () => void }[]; onClose: () => void }) {
+  return (
+    <Modal title={title} onClose={onClose}>
+      <div className="choice-dialog">
+        <div className="small">{children}</div>
+        <div className="modal-foot">
+          <button type="button" className="btn btn-sm" onClick={onClose}>Cancel</button>
+          {actions.map((a) => (
+            <button key={a.label} type="button" className={`btn btn-sm${a.primary ? ' btn-primary' : ''}`} onClick={a.onClick}>
+              {a.label}
+            </button>
+          ))}
+        </div>
       </div>
     </Modal>
   );

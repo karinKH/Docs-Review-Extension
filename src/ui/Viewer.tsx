@@ -4,7 +4,13 @@ import { domPointToSource, SourceDomIndex } from '../core/markdown/dom-map';
 import { createDocContext, type DocContext } from '../core/anchor/context';
 import { createAnchor } from '../core/anchor/anchor';
 import { expandScope, type ScopedRange } from '../core/anchor/scope';
-import { isAnchored, relocateAll } from '../core/anchor/relocate';
+import { isAnchored } from '../core/anchor/relocate';
+import { confirmMatch, describeRound, startRound } from '../core/rounds';
+import { applyReply, parseReply } from '../core/reply';
+import { planReplacements, replaceable, unifiedPatch } from '../core/apply';
+import { parseReviewFile, ReviewFileError, toReviewFile, toWebAnnotations } from '../core/review-file';
+import { download, pickTextFile, saveText } from './lib/save-file';
+import { buildPrintRoot } from './lib/print';
 import { fingerprint } from '../core/text/hash';
 import {
   addAnnotation,
@@ -28,14 +34,23 @@ import { MarkdownView } from './components/MarkdownView';
 import { RawView } from './components/RawView';
 import { CommentPopover, type CommentDraft } from './components/CommentPopover';
 import { ReviewPanel, type PanelTab } from './components/ReviewPanel';
-import { SettingsDialog, ShortcutsDialog } from './components/Dialogs';
+import { ChoiceDialog, PasteDialog, SettingsDialog, ShortcutsDialog } from './components/Dialogs';
+import type { MenuItem } from './components/Header';
 import { IconComment, IconExpand, IconPlus, IconShrink, IconWarn, IconX } from './components/Icons';
 
 interface Props {
   source: string;
   identity: DocIdentity;
   onReload?: () => void;
+  /** Hands a new version of this document to the app (pasted, or written by "apply"). */
+  onNewSource?: (text: string) => void;
+  /** Writes the document back to the file it came from (files opened with "Open file"). */
+  onWriteFile?: (text: string) => Promise<boolean>;
+  /** True while the file is watched for changes. */
+  watching?: boolean;
 }
+
+type DialogKind = 'settings' | 'shortcuts' | 'paste-reply' | 'paste-version' | 'apply';
 
 type Rect = { top: number; bottom: number; left: number; right: number };
 
@@ -52,7 +67,8 @@ interface History {
   future: Session[];
 }
 
-const HL_NAMES = ['rp-must', 'rp-suggestion', 'rp-nit', 'rp-active', 'rp-flash'] as const;
+const HL_NAMES = ['rp-must', 'rp-suggestion', 'rp-nit', 'rp-active', 'rp-flash', 'rp-change', 'rp-unreq'] as const;
+const MAX_REVIEW_FILE = 60 * 1024 * 1024;
 
 function rectOf(r: DOMRect | Range): Rect {
   const b = r instanceof Range ? r.getBoundingClientRect() : r;
@@ -65,16 +81,17 @@ function isTyping(t: EventTarget | null): boolean {
   return el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName);
 }
 
-export function Viewer({ source, identity, onReload }: Props) {
+export function Viewer({ source, identity, onReload, onNewSource, onWriteFile, watching = false }: Props) {
   const [settings, updateSettings, settingsReady] = useSettings();
   const [hist, setHist] = useState<History | null>(null);
-  const [banner, setBanner] = useState<string | null>(null);
+  const [banner, setBanner] = useState<{ text: string; rounds?: boolean } | null>(null);
+  const [showChanges, setShowChanges] = useState(true);
   const [view, setView] = useState<'rendered' | 'raw'>('rendered');
   const [tab, setTab] = useState<PanelTab>('comments');
   const [composer, setComposer] = useState<Composer | null>(null);
   const [scoped, setScoped] = useState<(ScopedRange & { rect: Rect }) | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [dialog, setDialog] = useState<'settings' | 'shortcuts' | null>(null);
+  const [dialog, setDialog] = useState<DialogKind | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [allowImages, setAllowImages] = useState(false);
   const [renderVersion, setRenderVersion] = useState(0);
@@ -90,6 +107,9 @@ export function Viewer({ source, identity, onReload }: Props) {
   const programmatic = useRef<ScopedRange | null>(null);
   const pendingScroll = useRef<number | null>(null);
   const wheelAt = useRef(0);
+  const sessionRef = useRef<Session | null>(null);
+  /** Comment numbers applied by "Apply exact-text changes": resolved once the new version arrives. */
+  const pendingResolve = useRef<number[] | null>(null);
 
   const rendered = useMemo(() => renderMarkdown(source, { baseUrl: identity.baseUrl }), [source, identity.baseUrl]);
   const docCtx: DocContext = useMemo(() => createDocContext(source, rendered), [source, rendered]);
@@ -101,20 +121,26 @@ export function Viewer({ source, identity, onReload }: Props) {
   }, [identity.title]);
 
   // ---------- session load / autosave ----------
+  // A new version of the document (from disk, the file watcher, a paste, or
+  // "apply") starts a review round: comments are found again, each with a
+  // state and a confidence, and changes nobody asked for are flagged.
   useEffect(() => {
     let alive = true;
     (async () => {
-      const saved = await loadSession(identity.docKey);
+      const inMemory = sessionRef.current;
+      const saved = inMemory ?? (await loadSession(identity.docKey));
       let s: Session;
       if (!saved) {
         s = createSession({ docKey: identity.docKey, title: identity.title, filePath: identity.filePath, source });
       } else if (saved.sourceFingerprint !== fingerprint(source)) {
-        const r = relocateAll(docCtx, saved.annotations);
-        s = { ...saved, source, sourceFingerprint: fingerprint(source), annotations: r.annotations, title: identity.title };
-        const parts: string[] = ['This file changed since your last visit.'];
-        if (r.moved.length) parts.push(`${r.moved.length} comment${r.moved.length === 1 ? '' : 's'} moved with the text.`);
-        if (r.lost.length) parts.push(`${r.lost.length} could not be found (${r.lost.map((n) => `#${n}`).join(', ')}) and ${r.lost.length === 1 ? 'is' : 'are'} marked “Not found”.`);
-        if (r.moved.length || r.lost.length) setBanner(parts.join(' '));
+        const { session: next, report } = startRound(saved, source, docCtx);
+        s = { ...next, title: identity.title };
+        const applied = pendingResolve.current;
+        pendingResolve.current = null;
+        if (applied) {
+          s = { ...s, annotations: s.annotations.map((a) => (applied.includes(a.number) ? { ...a, status: 'resolved', aiReply: 'Applied by Review Pen, exactly as written (no AI)' } : a)) };
+        }
+        if (saved.annotations.length) setBanner({ text: `${describeRound(report)}${inMemory ? '' : ' (The file changed since your last visit.)'}`, rounds: true });
       } else {
         s = saved;
       }
@@ -127,6 +153,7 @@ export function Viewer({ source, identity, onReload }: Props) {
   }, [identity.docKey, source]);
 
   const session = hist?.session ?? null;
+  sessionRef.current = session;
 
   useEffect(() => {
     if (!session) return;
@@ -200,8 +227,20 @@ export function Viewer({ source, identity, onReload }: Props) {
     CSS.highlights.set('rp-nit', new Highlight(...groups.nit!));
     if (active) CSS.highlights.set('rp-active', new Highlight(active));
     else CSS.highlights.delete('rp-active');
+    const last = session?.rounds[session.rounds.length - 1];
+    const changed: Range[] = [];
+    const unreq: Range[] = [];
+    if (showChanges && session && session.rounds.length > 1 && last?.hunks && last.source === session.source) {
+      for (const h of last.hunks.slice(0, 500)) {
+        if (h.newEnd <= h.newStart) continue;
+        const r = index.toRange(h.newStart, h.newEnd);
+        if (r) (h.unrequested ? unreq : changed).push(r);
+      }
+    }
+    CSS.highlights.set('rp-change', new Highlight(...changed));
+    CSS.highlights.set('rp-unreq', new Highlight(...unreq));
     layoutBadges();
-  }, [visible, activeId, renderVersion, view, getIndex, layoutBadges]);
+  }, [visible, activeId, renderVersion, view, getIndex, layoutBadges, session, showChanges]);
 
   useEffect(() => () => HL_NAMES.forEach((n) => 'highlights' in CSS && CSS.highlights.delete(n)), []);
 
@@ -503,6 +542,136 @@ export function Viewer({ source, identity, onReload }: Props) {
     void copyText(r.parts[0]!.text, `${r.itemCount} comment${r.itemCount === 1 ? '' : 's'}`);
   }, [session, options, copyText, updateSettings]);
 
+  // ---------- review rounds, exports ----------
+  const exactCount = useMemo(() => (session ? replaceable(session).length : 0), [session]);
+  const promptExt = settings.compile.preset === 'chat' ? '.txt' : '.md';
+
+  const savePrompt = useCallback(
+    async (text?: string) => {
+      if (!session) return;
+      let body = text;
+      if (body === undefined) {
+        const r = compile(session, options);
+        if (r.itemCount === 0) {
+          setToast('Nothing to save yet: add a comment first.');
+          return;
+        }
+        body = r.parts.length === 1 ? r.parts[0]!.text : r.parts.map((p, i) => `<!-- Part ${i + 1} of ${r.parts.length} -->\n\n${p.text}`).join('\n\n');
+      }
+      const base = identity.title.replace(/\.[^.]+$/, '');
+      if (await saveText(`${base}.prompt${promptExt}`, body, 'text/plain', promptExt)) setToast('Prompt saved');
+    },
+    [session, options, identity.title, promptExt],
+  );
+
+  const printPdf = useCallback(() => {
+    const index = getIndex();
+    const docEl = docRef.current;
+    if (!session || !index || !docEl) return;
+    const root = buildPrintRoot({ docEl, index, session, annotations: visible, title: identity.title, filePath: session.filePath || identity.filePath, now: new Date() });
+    document.getElementById('print-root')?.remove();
+    document.body.append(root);
+    const title = document.title;
+    // Chrome uses the page title as the suggested PDF file name.
+    document.title = `${identity.title.replace(/\.[^.]+$/, '')} - review`;
+    const cleanup = () => {
+      root.remove();
+      document.title = title;
+      window.removeEventListener('afterprint', cleanup);
+    };
+    window.addEventListener('afterprint', cleanup);
+    setTimeout(() => window.print(), 60);
+  }, [getIndex, session, visible, identity.title, identity.filePath]);
+
+  const saveReviewFile = useCallback(async () => {
+    if (!session) return;
+    const base = identity.title.replace(/\.[^.]+$/, '');
+    if (await saveText(`${base}.review.json`, toReviewFile(session), 'application/json', '.json')) setToast('Review file saved');
+  }, [session, identity.title]);
+
+  const exportWebAnnotations = useCallback(() => {
+    if (!session) return;
+    download(`${identity.title.replace(/\.[^.]+$/, '')}.annotations.jsonld`, toWebAnnotations(session), 'application/ld+json');
+    setToast('Comments exported as W3C Web Annotations');
+  }, [session, identity.title]);
+
+  const openReviewFile = useCallback(async () => {
+    try {
+      const f = await pickTextFile('.json,application/json', MAX_REVIEW_FILE);
+      if (!f) return;
+      let loaded = parseReviewFile(f.text);
+      loaded = { ...loaded, docKey: identity.docKey, title: identity.title };
+      let note = '';
+      if (loaded.sourceFingerprint !== fingerprint(source)) {
+        const { session: next, report } = startRound(loaded, source, docCtx);
+        loaded = next;
+        note = ` ${describeRound(report)}`;
+      }
+      commit(() => loaded);
+      setBanner({ text: `Loaded ${loaded.annotations.length} comment${loaded.annotations.length === 1 ? '' : 's'} from ${f.name}. Ctrl+Z brings back what you had.${note}`, rounds: !!note });
+    } catch (e) {
+      setBanner({ text: e instanceof ReviewFileError ? e.message : e instanceof Error ? e.message : 'Could not read this file.' });
+    }
+  }, [identity.docKey, identity.title, source, docCtx, commit]);
+
+  const applyExact = useCallback(
+    async (target: 'file' | 'download') => {
+      if (!session) return;
+      setDialog(null);
+      const plan = planReplacements(session);
+      if (!plan.applied.length) {
+        setToast('No exact-text comment can be applied.');
+        return;
+      }
+      if (target === 'file' && onWriteFile) {
+        let ok = false;
+        try {
+          ok = await onWriteFile(plan.text);
+        } catch {
+          ok = false;
+        }
+        if (!ok) {
+          setToast('Chrome did not allow writing to the file. Nothing was changed.');
+          return;
+        }
+      } else {
+        download(identity.title, plan.text, 'text/markdown');
+        download(`${identity.title}.patch`, unifiedPatch(session.filePath || identity.title, session.source, plan.text), 'text/x-diff');
+      }
+      pendingResolve.current = plan.applied;
+      onNewSource?.(plan.text);
+      setToast(`Applied ${plan.applied.map((n) => `#${n}`).join(', ')}${target === 'file' ? ` to ${identity.title}` : ' · revised file and patch downloaded'}`);
+    },
+    [session, onWriteFile, onNewSource, identity.title],
+  );
+
+  const confirm = useCallback((a: Annotation, ok: boolean) => commit((s) => confirmMatch(s, a.id, ok)), [commit]);
+
+  const jumpToRange = useCallback((start: number, end: number) => scrollToOffset(start, { start, end }), [scrollToOffset]);
+
+  const openPanelTab = useCallback(
+    (t: PanelTab) => {
+      setTab(t);
+      updateSettings({ panelOpen: true });
+    },
+    [updateSettings],
+  );
+
+  const menu: MenuItem[] = useMemo(
+    () => [
+      { label: 'Annotated PDF… (Ctrl+P)', onSelect: printPdf },
+      { label: 'Save prompt as a file…', onSelect: () => void savePrompt() },
+      { label: 'Save review file…', onSelect: () => void saveReviewFile() },
+      { label: 'Open review file…', onSelect: () => void openReviewFile() },
+      { label: 'Export comments (W3C Web Annotations)', onSelect: exportWebAnnotations },
+      { label: "Paste the AI's checklist reply…", onSelect: () => setDialog('paste-reply'), separator: true },
+      { label: 'Paste a revised version…', onSelect: () => setDialog('paste-version'), disabled: !onNewSource },
+      { label: `Apply exact-text changes (${exactCount})…`, onSelect: () => setDialog('apply'), disabled: exactCount === 0 || !onNewSource },
+      { label: 'Review rounds and changes', onSelect: () => openPanelTab('rounds') },
+    ],
+    [printPdf, savePrompt, saveReviewFile, openReviewFile, exportWebAnnotations, exactCount, onNewSource, openPanelTab],
+  );
+
   // ---------- keyboard ----------
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -514,6 +683,12 @@ export function Viewer({ source, identity, onReload }: Props) {
           window.getSelection()?.removeAllRanges();
           setScoped(null);
         } else setActiveId(null);
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'p') {
+        // Ctrl+P prints the annotated version instead of the app screen.
+        e.preventDefault();
+        if (!composer && !dialog) printPdf();
         return;
       }
       if (isTyping(e.target) || composer || dialog) return;
@@ -561,7 +736,7 @@ export function Viewer({ source, identity, onReload }: Props) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [composer, dialog, scoped, activeId, session, view, settings.tocOpen, copyPrompt, undo, redo, widen, narrow, commentOnSelection, step, editAnnotation, switchView, updateSettings]);
+  }, [composer, dialog, scoped, activeId, session, view, settings.tocOpen, copyPrompt, undo, redo, widen, narrow, commentOnSelection, step, editAnnotation, switchView, updateSettings, printPdf]);
 
   // Alt + wheel widens / narrows.
   useEffect(() => {
@@ -683,6 +858,7 @@ export function Viewer({ source, identity, onReload }: Props) {
         onCopy={copyPrompt}
         onReload={onReload}
         openCount={openCount}
+        menu={menu}
       />
 
       <aside className="toc" aria-hidden={!settings.tocOpen}>
@@ -693,7 +869,12 @@ export function Viewer({ source, identity, onReload }: Props) {
         {banner ? (
           <div className="banner" role="status">
             <IconWarn size={16} />
-            <span>{banner}</span>
+            <span>{banner.text}</span>
+            {banner.rounds ? (
+              <button type="button" className="btn btn-sm" onClick={() => openPanelTab('rounds')}>
+                Review changes
+              </button>
+            ) : null}
             <button type="button" className="icon-btn" aria-label="Dismiss" onClick={() => setBanner(null)}>
               <IconX size={14} />
             </button>
@@ -768,6 +949,19 @@ export function Viewer({ source, identity, onReload }: Props) {
           onDirectives={(d) => commit((s) => setDirectives(s, d))}
           onFilePath={(p) => commit((s) => setFilePath(s, p))}
           onCopy={(text, info) => void copyText(text, info)}
+          onSavePrompt={(t) => void savePrompt(t)}
+          rounds={{
+            watching,
+            canReload: !!onReload,
+            exactCount,
+            showChanges,
+            onShowChanges: setShowChanges,
+            onConfirm: confirm,
+            onJump: jumpToRange,
+            onPasteReply: () => setDialog('paste-reply'),
+            onPasteVersion: () => setDialog('paste-version'),
+            onApplyExact: () => setDialog('apply'),
+          }}
           onJumpNumber={(n) => {
             const a = session.annotations.find((x) => x.number === n);
             if (a) {
@@ -826,6 +1020,86 @@ export function Viewer({ source, identity, onReload }: Props) {
 
       {dialog === 'shortcuts' ? <ShortcutsDialog onClose={() => setDialog(null)} /> : null}
       {dialog === 'settings' ? <SettingsDialog settings={settings} onChange={updateSettings} onClose={() => setDialog(null)} /> : null}
+      {dialog === 'paste-reply' ? (
+        <PasteDialog
+          title="Paste the AI's checklist reply"
+          intro={
+            <>
+              Every prompt asks the AI to end with a checklist like <code>#3 done</code>, <code>#4 skipped: reason</code> or <code>#5 answer: …</code>. Paste its whole answer: only those lines are read. Skipped items are marked “Retry” and go into the next prompt as a second attempt.
+            </>
+          }
+          placeholder={'#1 done\n#2 skipped: the section was already removed\n#5 answer: yes, both numbers come from the Q3 report'}
+          submitLabel="Apply to comments"
+          preview={(text) => {
+            const lines = parseReply(text);
+            if (!lines.length) return { ok: false, message: 'No checklist lines found. They look like “#3 done” or “#4 skipped: reason”.' };
+            const known = new Set(session.annotations.map((a) => a.number));
+            const unknown = lines.filter((l) => !known.has(l.number)).map((l) => `#${l.number}`);
+            const n = (k: string) => lines.filter((l) => l.kind === k && known.has(l.number)).length;
+            return {
+              ok: lines.length > unknown.length,
+              message: `Found ${n('done')} done, ${n('skipped')} skipped (will be asked again), ${n('answer')} answer${n('answer') === 1 ? '' : 's'}.${unknown.length ? ` Not in this review: ${unknown.join(', ')}.` : ''}`,
+            };
+          }}
+          onSubmit={(text) => {
+            const r = applyReply(session, parseReply(text));
+            commit(() => r.session);
+            setDialog(null);
+            setToast(`Noted the AI's reply for ${r.applied.length} comment${r.applied.length === 1 ? '' : 's'}${r.missing.length ? ` · no reply for ${r.missing.map((x) => `#${x}`).join(', ')}` : ''}`);
+          }}
+          onClose={() => setDialog(null)}
+        />
+      ) : null}
+      {dialog === 'paste-version' && onNewSource ? (
+        <PasteDialog
+          title="Paste a revised version"
+          intro={<>Paste the whole revised document. Review Pen compares it with the current version word by word, finds every comment again, and shows what changed, including changes you did not ask for. The file on your computer is not changed.</>}
+          placeholder="# The revised document…"
+          submitLabel={`Start round ${(session.rounds[session.rounds.length - 1]?.number ?? 1) + 1}`}
+          preview={(text) => (text === session.source ? { ok: false, message: 'This is the same as the current version.' } : { ok: true, message: `${text.length.toLocaleString()} characters. Your ${session.annotations.length} comment${session.annotations.length === 1 ? '' : 's'} will be matched to this version.` })}
+          onSubmit={(text) => {
+            setDialog(null);
+            onNewSource(text);
+          }}
+          onClose={() => setDialog(null)}
+        />
+      ) : null}
+      {dialog === 'apply'
+        ? (() => {
+            const plan = planReplacements(session);
+            return (
+              <ChoiceDialog
+                title="Apply exact-text changes"
+                onClose={() => setDialog(null)}
+                actions={
+                  plan.applied.length === 0
+                    ? []
+                    : onWriteFile
+                      ? [
+                          { label: 'Download instead', onClick: () => void applyExact('download') },
+                          { label: `Write to ${identity.title}`, primary: true, onClick: () => void applyExact('file') },
+                        ]
+                      : [{ label: 'Download revised file and patch', primary: true, onClick: () => void applyExact('download') }]
+                }
+              >
+                {plan.applied.length ? (
+                  <p>
+                    {plan.applied.map((n) => `#${n}`).join(', ')} will be replaced exactly as you wrote {plan.applied.length === 1 ? 'it' : 'them'}, with no AI and no tokens. {plan.applied.length === 1 ? 'It is' : 'They are'} then marked resolved.
+                  </p>
+                ) : (
+                  <p>No exact-text comment can be applied right now.</p>
+                )}
+                {plan.overlapping.length ? <p className="warn-text">Skipped because they overlap another change: {plan.overlapping.map((n) => `#${n}`).join(', ')}.</p> : null}
+                {plan.stale.length ? <p className="warn-text">Skipped because their text is not in this version: {plan.stale.map((n) => `#${n}`).join(', ')}.</p> : null}
+                {onWriteFile ? (
+                  <p className="muted">Chrome will ask once for permission to save changes to the file. The version before is kept under Rounds.</p>
+                ) : (
+                  <p className="muted">Review Pen cannot write to this file, so it downloads the revised file and a .patch file (for git). It also continues the review with the revised text.</p>
+                )}
+              </ChoiceDialog>
+            );
+          })()
+        : null}
       {toast ? <div className="toast" role="status">{toast}</div> : null}
     </div>
   );

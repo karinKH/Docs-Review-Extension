@@ -2,7 +2,7 @@
 // file, and load it back. Imported files come from outside, so every field is
 // checked against a strict shape before anything uses it. Nothing is evaluated.
 
-import { INTENTS, MATCH_STATES, PRIORITIES, STATUSES, type Annotation, type Anchor, type Round, type Session } from './types';
+import { INTENTS, MATCH_STATES, MAX_ROUND_HUNKS, PRIORITIES, STATUSES, type Annotation, type Anchor, type Round, type Session } from './types';
 import { fingerprint } from './text/hash';
 
 export const REVIEW_FILE_FORMAT = 'review-pen/review-file@1';
@@ -100,6 +100,13 @@ function readRound(v: unknown): Round {
   const r: Round = { number: num(v, 'number'), at: num(v, 'at'), source, fingerprint: fingerprint(source) };
   if (typeof v.unrequested === 'number') r.unrequested = v.unrequested;
   if (typeof v.changes === 'number') r.changes = v.changes;
+  if (Array.isArray(v.hunks)) {
+    r.hunks = v.hunks.slice(0, MAX_ROUND_HUNKS).filter(isObj).map((h) => {
+      const [oldStart, oldEnd, newStart, newEnd] = [num(h, 'oldStart'), num(h, 'oldEnd'), num(h, 'newStart'), num(h, 'newEnd')];
+      if (oldStart < 0 || oldEnd < oldStart || newStart < 0 || newEnd < newStart || newEnd > source.length) throw new ReviewFileError('A round has an invalid change.');
+      return { oldStart, oldEnd, newStart, newEnd, unrequested: h.unrequested === true };
+    });
+  }
   return r;
 }
 

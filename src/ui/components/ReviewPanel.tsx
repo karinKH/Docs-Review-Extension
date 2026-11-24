@@ -7,9 +7,23 @@ import { inDocumentOrder } from '../../core/session';
 import { isAnchored } from '../../core/anchor/relocate';
 import { TemplateError } from '../../core/compile/template';
 import { locationLabel } from './CommentPopover';
-import { IconCheck, IconCopy, IconPlus, IconSearch, IconTrash, IconWarn, IconX } from './Icons';
+import { IconCheck, IconCopy, IconDownload, IconPlus, IconSearch, IconTrash, IconWarn, IconX } from './Icons';
+import { MatchPill, RoundsPanel } from './RoundsPanel';
 
-export type PanelTab = 'comments' | 'prompt';
+export type PanelTab = 'comments' | 'prompt' | 'rounds';
+
+export interface RoundsProps {
+  watching: boolean;
+  canReload: boolean;
+  exactCount: number;
+  showChanges: boolean;
+  onShowChanges: (on: boolean) => void;
+  onConfirm: (a: Annotation, ok: boolean) => void;
+  onJump: (start: number, end: number) => void;
+  onPasteReply: () => void;
+  onPasteVersion: () => void;
+  onApplyExact: () => void;
+}
 
 interface Props {
   session: Session;
@@ -28,6 +42,8 @@ interface Props {
   onFilePath: (p: string) => void;
   onCopy: (text: string, info: string) => void;
   onJumpNumber: (n: number) => void;
+  onSavePrompt: (text: string) => void;
+  rounds: RoundsProps;
 }
 
 type Filter = 'all' | 'open' | 'must';
@@ -86,7 +102,7 @@ function CommentsTab(p: Props) {
       ) : (
         <ol className="cards">
           {list.map((a) => {
-            const lost = !isAnchored(p.session.source, a);
+            const lost = !isAnchored(p.session.source, a) && !a.match;
             return (
               <li key={a.id} className={`card${p.activeId === a.id ? ' active' : ''}${a.status === 'resolved' ? ' resolved' : ''}`}>
                 <div
@@ -105,14 +121,23 @@ function CommentsTab(p: Props) {
                     <span className={`prio p-${a.priority}`}>{PRIORITY_LABELS[a.priority]}</span>
                     {a.status === 'resolved' ? <span className="pill ok">Resolved</span> : null}
                     {lost ? <span className="pill warn" title="The quoted text is not in this version of the file">Not found</span> : null}
+                    <MatchPill a={a} />
                   </div>
                   <div className="card-quote" dir="auto">{a.anchor.exact.length > 160 ? `${a.anchor.exact.slice(0, 160)}…` : a.anchor.exact}</div>
                   {a.mode === 'replace' ? (
                     <div className="card-body mono" dir="auto">→ {a.replacement || <em>(delete)</em>}</div>
                   ) : null}
                   {a.body.trim() ? <div className="card-body" dir="auto">{a.body}</div> : null}
+                  {a.aiReply ? <div className="card-ai" dir="auto"><span className="muted">AI:</span> {a.aiReply}</div> : null}
                   <div className="card-loc" dir="auto">{locationLabel(a.anchor)}</div>
                 </div>
+                {a.match?.state === 'uncertain' ? (
+                  <div className="confirm-row">
+                    <span className="muted small">Is this the right place?</span>
+                    <button type="button" className="btn btn-xs" onClick={() => p.rounds.onConfirm(a, true)}><IconCheck size={13} /> Yes</button>
+                    <button type="button" className="btn btn-xs" onClick={() => p.rounds.onConfirm(a, false)}><IconX size={13} /> No</button>
+                  </div>
+                ) : null}
                 <div className="card-actions">
                   <button type="button" className="icon-btn" title={a.status === 'resolved' ? 'Reopen' : 'Mark resolved'} aria-label={a.status === 'resolved' ? 'Reopen' : 'Mark resolved'} onClick={() => p.onToggleResolved(a)}>
                     <IconCheck size={15} />
@@ -365,6 +390,9 @@ function PromptTab(p: Props) {
             >
               <IconCopy size={14} /> Copy
             </button>
+            <button type="button" className="icon-btn" title="Save as a file" aria-label="Save prompt as a file" disabled={!part || result.itemCount === 0} onClick={() => part && p.onSavePrompt(part.text)}>
+              <IconDownload size={15} />
+            </button>
           </div>
           <pre className="preview-text" dir="auto" tabIndex={0} aria-label="Prompt preview">{part?.text ?? ''}</pre>
         </div>
@@ -375,6 +403,7 @@ function PromptTab(p: Props) {
 
 function ReviewPanelImpl(p: Props) {
   const open = p.session.annotations.filter((a) => a.status !== 'resolved').length;
+  const attention = p.session.annotations.filter((a) => a.match?.state === 'uncertain').length;
   return (
     <div className="panel-inner">
       <div className="tabs" role="tablist">
@@ -384,8 +413,11 @@ function ReviewPanelImpl(p: Props) {
         <button type="button" role="tab" aria-selected={p.tab === 'prompt'} className={`tab${p.tab === 'prompt' ? ' on' : ''}`} onClick={() => p.onTab('prompt')}>
           Prompt
         </button>
+        <button type="button" role="tab" aria-selected={p.tab === 'rounds'} className={`tab${p.tab === 'rounds' ? ' on' : ''}`} onClick={() => p.onTab('rounds')}>
+          Rounds {attention ? <span className="count warn">{attention}</span> : <span className="count">{p.session.rounds.length}</span>}
+        </button>
       </div>
-      {p.tab === 'comments' ? <CommentsTab {...p} /> : <PromptTab {...p} />}
+      {p.tab === 'comments' ? <CommentsTab {...p} /> : p.tab === 'prompt' ? <PromptTab {...p} /> : <RoundsPanel session={p.session} onSelect={p.onSelect} {...p.rounds} />}
     </div>
   );
 }

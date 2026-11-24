@@ -5,7 +5,7 @@ import type { DocContext } from './anchor/context';
 import { relocateAll } from './anchor/relocate';
 import { diffSegments, hunksOf, type Hunk } from './text/diff';
 import { fingerprint } from './text/hash';
-import { MAX_ROUNDS, type Annotation, type Session } from './types';
+import { MAX_ROUND_HUNKS, MAX_ROUNDS, type Annotation, type Session } from './types';
 
 export interface ChangeHunk extends Hunk {
   /** True when no open comment covered this part of the old text. */
@@ -35,12 +35,10 @@ export function changesBetween(oldSource: string, newSource: string, asked: Anno
   const segs = diffSegments(oldSource, newSource);
   if (!segs) return { hunks: [], diffed: false };
   const ranges = asked.filter((a) => ASKING.has(a.status)).map((a) => [a.anchor.start, a.anchor.end] as const);
-  const hunks = hunksOf(segs).map((h) => {
-    // Pure insertions touch the old text at one point; count them as requested
-    // when they sit at the edge of or inside a commented range.
-    const lo = h.oldStart;
-    const hi = Math.max(h.oldEnd, h.oldStart);
-    const covered = ranges.some(([s, e]) => (h.oldEnd > h.oldStart ? lo < e && hi > s : lo >= s && lo <= e));
+  const hunks = hunksOf(segs, oldSource).map((h) => {
+    // A change inside a commented range, or touching its edge (an AI often
+    // adjusts the punctuation right next to the phrase it rewrote), was requested.
+    const covered = ranges.some(([s, e]) => h.oldStart <= e && h.oldEnd >= s);
     return { ...h, unrequested: !covered };
   });
   return { hunks, diffed: true };
@@ -54,7 +52,8 @@ export function startRound(session: Session, newSource: string, ctx: DocContext,
   const unchanged = r.annotations.filter((a) => a.match?.state === 'unchanged').map((a) => a.number);
   const deletedAsAsked = r.annotations.filter((a) => a.match?.state === 'lost' && a.intent === 'delete').map((a) => a.number);
   const unrequested = hunks.filter((h) => h.unrequested).length;
-  const rounds = [...session.rounds, { number, at: now, source: newSource, fingerprint: fingerprint(newSource), unrequested, changes: hunks.length }].slice(-MAX_ROUNDS);
+  const stored = hunks.slice(0, MAX_ROUND_HUNKS).map(({ oldStart, oldEnd, newStart, newEnd, unrequested: u }) => ({ oldStart, oldEnd, newStart, newEnd, unrequested: u }));
+  const rounds = [...session.rounds, { number, at: now, source: newSource, fingerprint: fingerprint(newSource), unrequested, changes: hunks.length, hunks: stored }].slice(-MAX_ROUNDS);
   return {
     session: { ...session, source: newSource, sourceFingerprint: fingerprint(newSource), annotations: r.annotations, rounds, updatedAt: now },
     report: { round: number, unchanged, moved: r.moved, changed: r.changed, uncertain: r.uncertain, lost: r.lost, deletedAsAsked, hunks, unrequested, diffed },

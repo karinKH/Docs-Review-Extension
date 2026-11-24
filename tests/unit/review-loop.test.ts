@@ -268,3 +268,12 @@ describe('review files', () => {
     expect(w.first.items[0].target.selector[0]).toMatchObject({ type: 'TextQuoteSelector', exact: '500 weekly active teams' });
   });
 });
+
+describe('scope guard edge cases', () => {
+  test('an addition right after a commented phrase counts as requested', () => {
+    const s = sampleSession();
+    const edited = s.source.replace('500 weekly active teams', '750 weekly active teams, because pilots converted').replace('# Launch plan', '# Launch plan v2');
+    const { hunks } = changesBetween(s.source, edited, s.annotations);
+    expect(hunks.filter((h) => h.unrequested).map((h) => edited.slice(h.newStart, h.newEnd))).toEqual([' v2']);
+  });
+});

@@ -132,7 +132,21 @@ export interface Round {
   unrequested?: number;
   /** Changed regions compared with the previous round. */
   changes?: number;
+  /** The changed regions themselves (offsets into the previous and this round's text). */
+  hunks?: RoundHunk[];
 }
+
+export interface RoundHunk {
+  oldStart: number;
+  oldEnd: number;
+  newStart: number;
+  newEnd: number;
+  /** No open comment asked for this change. */
+  unrequested: boolean;
+}
+
+/** At most this many changed regions are kept per round. */
+export const MAX_ROUND_HUNKS = 2000;
 
 export const MAX_ROUNDS = 20;
 

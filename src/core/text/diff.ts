@@ -46,11 +46,25 @@ export function diffSegments(oldText: string, newText: string): Segment[] | null
   return out;
 }
 
-/** Changed regions, with a deletion and the insertion next to it merged into one hunk. */
-export function hunksOf(segments: Segment[]): Hunk[] {
+/**
+ * Changed regions, with a deletion and the insertion next to it merged into one hunk. With the old text given, changes separated only
+ * by a short run of spaces are one hunk ("teams" → "teams, because pilots
+ * converted" is one change, not two).
+ */
+export function hunksOf(segments: Segment[], oldText?: string): Hunk[] {
   const out: Hunk[] = [];
-  for (const s of segments) {
-    if (s.type === 'eq') continue;
+  for (let i = 0; i < segments.length; i++) {
+    const s = segments[i]!;
+    if (s.type === 'eq') {
+      const last = out[out.length - 1];
+      const next = segments[i + 1];
+      const gap = oldText?.slice(s.oldStart, s.oldEnd);
+      if (last && next && next.type !== 'eq' && last.oldEnd === s.oldStart && gap !== undefined && gap.length <= 2 && !gap.trim()) {
+        last.oldEnd = s.oldEnd;
+        last.newEnd = s.newEnd;
+      }
+      continue;
+    }
     const last = out[out.length - 1];
     if (last && last.oldEnd === s.oldStart && last.newEnd === s.newStart) {
       last.oldEnd = s.oldEnd;
