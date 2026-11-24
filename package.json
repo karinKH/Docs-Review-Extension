@@ -20,6 +20,7 @@
     "@shikijs/themes": "4.6.0",
     "dexie": "4.4.7",
     "diff": "9.0.0",
+    "fflate": "0.8.2",
     "github-slugger": "2.0.0",
     "hast-util-to-jsx-runtime": "2.3.7",
     "js-tiktoken": "1.0.21",

@@ -7,11 +7,14 @@ import { browser } from 'wxt/browser';
 import { identityFromPickedFile, identityFromUrl, type DocIdentity } from '../../core/doc-key';
 import { getHandle } from './db';
 import { handoffKey, uploadKey, type Handoff, type Upload } from '../../core/handoff';
+import { isGoogleUrl } from '../../core/google/urls';
+import { loadGoogle } from './google';
 
 export type LoadResult =
   | { kind: 'ok'; source: string; identity: DocIdentity; origin: 'handoff' | 'fetch' | 'file' | 'demo'; reloadable: boolean }
   | { kind: 'needs-file-permission'; handleId: string; name: string }
   | { kind: 'needs-host-permission'; url: string; origin: string }
+  | { kind: 'needs-google-permission'; url: string; label: string }
   | { kind: 'reload-file'; url: string }
   | { kind: 'error'; message: string }
   | { kind: 'home' };
@@ -37,6 +40,10 @@ export async function loadFromParams(params: URLSearchParams): Promise<LoadResul
     return { kind: 'ok', source: up.text, identity: { docKey: `upload:${up.name}`, title: up.name, filePath: up.name }, origin: 'handoff', reloadable: false };
   }
   if (!src) return { kind: 'home' };
+  if (isGoogleUrl(src)) {
+    const tab = Number(params.get('tab'));
+    return loadGoogle(src, params.get('title'), Number.isInteger(tab) && tab > 0 ? tab : null);
+  }
 
   let identity: DocIdentity;
   try {

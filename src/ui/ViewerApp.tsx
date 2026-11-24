@@ -3,6 +3,7 @@ import { browser } from 'wxt/browser';
 import { loadFromParams, loadPicked, MAX_BYTES, type LoadResult } from './lib/load-source';
 import { handoffKey, uploadKey, type Upload } from '../core/handoff';
 import { getHandle } from './lib/db';
+import { GOOGLE_ORIGINS } from './lib/google';
 import { applyTheme, useSettings } from './lib/settings';
 import { Viewer } from './Viewer';
 import { Home } from './Home';
@@ -168,6 +169,24 @@ export function ViewerApp() {
         </Centered>
       );
     }
+    case 'needs-google-permission':
+      return (
+        <Centered title={`Open this file from ${state.label}`}>
+          <p className="muted">
+            Review Pen downloads Google's own export of this one file, using your Google sign-in in this browser, and converts it on your computer. Chrome will ask you to allow access to <strong>docs.google.com</strong> and <strong>googleusercontent.com</strong> (where Google serves downloads). Nothing is sent anywhere else, and you can remove this permission at any time.
+          </p>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={async () => {
+              const ok = await browser.permissions.request({ origins: GOOGLE_ORIGINS });
+              if (ok) void loadFromParams(params).then(setState);
+            }}
+          >
+            Allow and open
+          </button>
+        </Centered>
+      );
     case 'reload-file':
       return (
         <Centered title="Open the file again">

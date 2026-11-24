@@ -752,3 +752,9 @@ kbd {
 #print-root .pcallout-repl { font-family: var(--font-mono); font-size: 12px; }
 #print-root .pcallout-note { color: var(--text-3); font-size: 11.5px; margin-top: 2px; white-space: pre-wrap; }
 #print-root .punplaced { break-before: page; }
+
+/* ---------- Google link form (step 3) ---------- */
+.google-form { width: min(520px, 100%); margin: 6px auto 0; display: flex; flex-direction: column; gap: 6px; text-align: start; }
+.google-form p { margin: 0; }
+.google-row { display: flex; gap: 6px; }
+.google-row .input { flex: 1; min-width: 0; }

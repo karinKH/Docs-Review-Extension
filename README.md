@@ -29,6 +29,7 @@ Select a word, a sentence, a paragraph or a whole section. Say what should chang
 - **Exact text without AI.** Comments written as exact replacement text can be applied directly: written back into the file (Chrome asks for permission first) or downloaded with a `.patch` file for git. Zero tokens, no drift.
 - **Annotated PDF.** **Ctrl+P** (or More ▸ Annotated PDF) prints a copy with each comment's text marked, its number in superscript, a callout box with the comment after the paragraph, and a cover page with a summary and an index. Choose **Save as PDF** in Chrome's print dialog.
 - **Review files.** Save the whole review (comments, instructions, rounds) as a `.review.json` file to keep or share, and open it again later, on another computer too. Comments can also be exported as [W3C Web Annotations](https://www.w3.org/TR/annotation-model/). The prompt can be saved as a file.
+- **Google Docs, Sheets and Slides.** Click the Review Pen button in Chrome's toolbar while a Google file is open (or paste its link on the welcome page). Review Pen downloads Google's own export of that one file with your existing Google sign-in and converts it on your computer: Docs as Markdown, Sheets as one table per tab with row numbers and column letters (a comment on a cell names it in the prompt, for example `Budget!B7`, and formulas are listed), Slides as an outline with one section per slide and the speaker notes. It is a copy: you apply the changes in Google yourself (or paste the AI's revised text), and **Reload** fetches the new version as the next round. Review Pen does not draw on the Google page itself.
 - **Keyboard first.** Press **?** in the viewer for every shortcut.
 
 ## Install (from source, for now)
@@ -47,6 +48,7 @@ Review Pen is not on the Chrome Web Store yet. To try it:
 ### Optional setup
 
 - **Open local `.md` files straight from disk.** On `chrome://extensions`, open Review Pen's **Details** and turn on **Allow access to file URLs**. Then any `.md` file you open in Chrome shows up in Review Pen. (The **Open a Markdown file** button on the welcome page works without this.) Add `#raw` to the address to see the plain file instead.
+- **Google files.** The first time you open one, Chrome asks you to allow access to `docs.google.com` and `googleusercontent.com` (where Google serves downloads). Review Pen uses it only to download the export of the file you opened.
 - **Raw GitHub, GitLab and Gist links.** On the welcome page, click **Allow these sites**. Review Pen then opens raw `.md` links on `raw.githubusercontent.com`, `gist.githubusercontent.com` and `gitlab.com`, and no other sites.
 
 ## Keyboard shortcuts
@@ -77,8 +79,9 @@ In plain terms: Review Pen treats every document as untrusted, keeps everything 
 - **No remote code.** Every library is bundled and pinned to an exact version. There is no `eval` or `new Function` in the build.
 - **Minimal permissions.**
   - `storage` and `unlimitedStorage` keep your reviews in this browser (IndexedDB), so long documents don't hit a quota.
-  - `scripting` is used only to register the small script that hands raw `.md` pages on the sites *you* allowed to the viewer.
-  - Site access is *optional* and limited to the three hosts above; Review Pen asks for it only when you click **Allow these sites**.
+  - `scripting` is used to register the small script that hands raw `.md` pages on the sites *you* allowed to the viewer, and, as a last resort when a Google export can't be read directly, to fetch that export from inside the open Google tab.
+  - `activeTab` lets Review Pen read the address of the current tab only when you click its toolbar button, to open that Google file or `.md` page. It shows no install warning and gives no access to other tabs.
+  - Site access is *optional*: the three code-hosting sites above (only after **Allow these sites**) and `docs.google.com` / `googleusercontent.com` (only when you open a Google file and click **Allow and open**).
 - **Opening a review file is safe.** A `.review.json` file from someone else is checked field by field against a strict shape before anything uses it; unknown fields are dropped and nothing in it is ever run.
 - **Writing files only when you ask.** Review Pen writes to a file only when you click **Apply exact-text changes ▸ Write**, and Chrome asks you to allow it first. Watching a file only reads it.
 - **Your data is yours.** Reviews are stored in IndexedDB on this device only. Delete any review from the welcome page. Removing the extension deletes everything.
@@ -118,7 +121,7 @@ Built with [WXT](https://wxt.dev), React, TypeScript, unified/remark/rehype, Shi
 
 1. **Markdown reviewer** (done): viewer, anchoring, comments, prompt compiler, local storage.
 2. **Review loop and exports** (done): fuzzy re-anchoring, review rounds with a scope guard, the AI's checklist reply, exact text without AI, annotated PDF, review files, live file watching. Voice comments are left out on purpose: Chrome's built-in speech recognition sends audio to Google's servers, which breaks the promise that nothing leaves your browser.
-3. **Google Workspace:** annotate Google Docs, Slides and Sheets in place, using your existing Google sign-in, with export as a fallback. The review panel moves into Chrome's side panel.
+3. **Google Workspace** (done, as an import): Docs, Sheets and Slides open as a reviewable copy through Google's own export and your existing sign-in. Not done, on purpose: drawing comments directly on the Google page. Docs and Slides draw their content on a canvas, so it would mean reading Google's private, changing page internals, which breaks often and needs broad access to your Google pages.
 4. **Polish and release:** accessibility audit, more languages, Chrome Web Store listing.
 
 ## License

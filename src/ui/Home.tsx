@@ -5,6 +5,34 @@ import { MAX_HANDOFF_CHARS, uploadKey, type Upload } from '../core/handoff';
 import { deleteSession, listSessions, rememberHandle } from './lib/db';
 import { applyTheme, useSettings } from './lib/settings';
 import { IconCheck, IconFile, IconPen, IconTrash } from './components/Icons';
+import { googleEditUrl, isGoogleUrl, type GoogleKind } from '../core/google/urls';
+
+function GoogleLinkForm() {
+  const [link, setLink] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <form
+      className="google-form"
+      onSubmit={(e) => {
+        e.preventDefault();
+        const url = link.trim();
+        if (!isGoogleUrl(url)) {
+          setError('Paste the address of a Google Docs, Sheets or Slides file (it starts with https://docs.google.com/).');
+          return;
+        }
+        location.href = viewerUrl(`src=${encodeURIComponent(url)}`);
+      }}
+    >
+      <label className="field-label" htmlFor="rp-google">Google Docs, Sheets or Slides</label>
+      <div className="google-row">
+        <input id="rp-google" className="input input-sm" type="url" placeholder="https://docs.google.com/document/d/…" value={link} onChange={(e) => { setLink(e.target.value); setError(null); }} />
+        <button type="submit" className="btn btn-sm">Open</button>
+      </div>
+      <p className="muted small">Or click the Review Pen button in Chrome's toolbar while the file is open.</p>
+      {error ? <p className="error-text small" role="alert">{error}</p> : null}
+    </form>
+  );
+}
 
 const WEB_ORIGINS = ['https://raw.githubusercontent.com/*', 'https://gist.githubusercontent.com/*', 'https://gitlab.com/*'];
 
@@ -17,6 +45,8 @@ export function openSessionUrl(s: Session): string | null {
   if (s.docKey.startsWith('picked:')) return viewerUrl(`file=${encodeURIComponent(s.docKey.slice(7))}`);
   if (s.docKey.startsWith('file:')) return s.docKey;
   if (s.docKey.startsWith('http')) return viewerUrl(`src=${encodeURIComponent(s.docKey)}`);
+  const g = /^google:(doc|sheet|slides):([A-Za-z0-9_-]+)$/.exec(s.docKey);
+  if (g) return viewerUrl(`src=${encodeURIComponent(googleEditUrl({ kind: g[1] as GoogleKind, id: g[2]!, gid: null, authuser: null }))}&title=${encodeURIComponent(s.title)}`);
   // Opened with the basic picker: there is no link to the file, so it has to be chosen again.
   return null;
 }
@@ -146,6 +176,7 @@ export function Home() {
             if (f) setOpenError(await openUploaded(f));
           }}
         />
+        <GoogleLinkForm />
         {openError ? (
           <div className="open-error" role="alert">
             <p>{openError}</p>
