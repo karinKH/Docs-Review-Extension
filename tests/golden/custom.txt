@@ -1,0 +1,63 @@
+Please revise docs/launch.md (53 lines).
+Change only what the items below describe. Keep everything else exactly as it is.
+
+Document-wide instructions:
+- Use a confident, executive tone.
+- Keep the whole document under 800 words.
+
+
+#3 [Exact replacement / Nit] line 7 · section: Launch plan · paragraph 1 of its section
+```text
+It is a draft and will change.
+```
+Replace with:
+```text
+It is final.
+```
+
+#1 [Rewrite / Must fix] line 11 · section: Launch plan > Goals · paragraph 1 of its section
+```text
+500 weekly active teams
+```
+Instruction: Say 750 and explain why the target went up.
+
+#2 [Delete / Suggestion] line 28 · section: Launch plan > Timeline · paragraph 1 of its section
+```text
+We want to keep support tickets low.
+```
+Instruction: Delete this text.
+
+#4 [Expand / Must fix] lines 30-42 · section: Launch plan > Timeline > Risks · whole section
+````text
+### Risks
+
+Escaped \*stars\* and an entity &amp; an `inline code` span, plus math $E = mc^2$.
+
+```ts
+export function hello(name: string) {
+  return `Hello, ${name}`;
+}
+```
+
+$$
+\int_0^1 x^2 \, dx = \frac{1}{3}
+$$
+````
+Instruction: Add two real risks with owners. Merge with #2 if it helps.
+
+#6 [Exact replacement / Nit] line 36 · section: Launch plan > Timeline > Risks · code block 1 of its section
+```text
+return `Hello, ${name}`;
+```
+Replace with:
+```text
+return 'Hello, ' + name;
+```
+
+#5 [Question - do not edit / Suggestion] line 46 · section: Launch plan > סיכום בעברית · paragraph 1 of its section
+```text
+יש בה שני משפטים
+```
+Instruction: האם זה נכון?
+
+Reply with "#<n> done" or "#<n> skipped: <reason>" for every item.
