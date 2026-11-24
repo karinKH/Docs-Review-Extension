@@ -6,7 +6,7 @@
 import { browser } from 'wxt/browser';
 import { identityFromPickedFile, identityFromUrl, type DocIdentity } from '../../core/doc-key';
 import { getHandle } from './db';
-import { handoffKey, type Handoff } from '../../core/handoff';
+import { handoffKey, uploadKey, type Handoff, type Upload } from '../../core/handoff';
 
 export type LoadResult =
   | { kind: 'ok'; source: string; identity: DocIdentity; origin: 'handoff' | 'fetch' | 'file' | 'demo'; reloadable: boolean }
@@ -28,6 +28,14 @@ export async function loadFromParams(params: URLSearchParams): Promise<LoadResul
     return { kind: 'ok', source, identity: { docKey: 'demo:welcome', title: 'Welcome to Review Pen', filePath: 'demo.md' }, origin: 'demo', reloadable: false };
   }
   if (file) return loadPicked(file, false);
+  const upload = params.get('upload');
+  if (upload) {
+    const key = uploadKey(upload);
+    const up = (await browser.storage.session.get(key))[key] as Upload | undefined;
+    if (!up || typeof up.text !== 'string') return { kind: 'error', message: 'This file is no longer open in this browser session. Open it again from the welcome page.' };
+    // Same name, same review: opening the file again later brings your comments back.
+    return { kind: 'ok', source: up.text, identity: { docKey: `upload:${up.name}`, title: up.name, filePath: up.name }, origin: 'handoff', reloadable: false };
+  }
   if (!src) return { kind: 'home' };
 
   let identity: DocIdentity;

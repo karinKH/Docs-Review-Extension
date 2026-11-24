@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { browser } from 'wxt/browser';
 import type { Session } from '../core/types';
+import { MAX_HANDOFF_CHARS, uploadKey, type Upload } from '../core/handoff';
 import { deleteSession, listSessions, rememberHandle } from './lib/db';
 import { applyTheme, useSettings } from './lib/settings';
 import { IconCheck, IconFile, IconPen, IconTrash } from './components/Icons';
@@ -16,6 +17,7 @@ export function openSessionUrl(s: Session): string | null {
   if (s.docKey.startsWith('picked:')) return viewerUrl(`file=${encodeURIComponent(s.docKey.slice(7))}`);
   if (s.docKey.startsWith('file:')) return s.docKey;
   if (s.docKey.startsWith('http')) return viewerUrl(`src=${encodeURIComponent(s.docKey)}`);
+  // Opened with the basic picker: there is no link to the file, so it has to be chosen again.
   return null;
 }
 
@@ -26,20 +28,43 @@ async function navigate(url: string) {
   else location.href = url;
 }
 
-export async function pickFile(): Promise<void> {
-  if (!window.showOpenFilePicker) return;
+/**
+ * Opens Chrome's file picker. Returns an error message when the picker failed for a
+ * reason other than the user cancelling, so the page can say so and offer the basic picker.
+ */
+export async function pickFile(): Promise<string | null> {
+  if (!window.showOpenFilePicker) return 'This version of Chrome has no file picker for extensions.';
+  let handle: FileSystemFileHandle | undefined;
   try {
-    const [handle] = await window.showOpenFilePicker({
+    [handle] = await window.showOpenFilePicker({
       types: [{ description: 'Markdown', accept: { 'text/markdown': ['.md', '.markdown', '.mdown', '.mkd', '.txt'] } }],
       excludeAcceptAllOption: false,
       multiple: false,
     });
-    if (!handle) return;
+  } catch (e) {
+    if (e instanceof DOMException && e.name === 'AbortError') return null; // cancelled
+    console.error('Review Pen: file picker failed', e);
+    return `Chrome's file picker failed (${e instanceof Error ? `${e.name}: ${e.message}` : String(e)}).`;
+  }
+  if (!handle) return null;
+  try {
     const rec = await rememberHandle(handle);
     location.href = viewerUrl(`file=${encodeURIComponent(rec.id)}`);
-  } catch {
-    /* cancelled */
+    return null;
+  } catch (e) {
+    console.error('Review Pen: could not remember the file', e);
+    return `Review Pen could not keep a link to this file (${e instanceof Error ? e.message : String(e)}).`;
   }
+}
+
+/** Basic picker: reads the file's text once. No live link to the file, so no reload button. */
+async function openUploaded(file: File): Promise<string | null> {
+  if (file.size > MAX_HANDOFF_CHARS) return 'This file is too large for the basic picker (over 4 MB).';
+  const id = crypto.randomUUID();
+  const value: Upload = { text: await file.text(), name: file.name, at: Date.now() };
+  await browser.storage.session.set({ [uploadKey(id)]: value });
+  location.href = viewerUrl(`upload=${encodeURIComponent(id)}`);
+  return null;
 }
 
 export function Home() {
@@ -48,6 +73,8 @@ export function Home() {
   const [webAccess, setWebAccess] = useState<boolean | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [dragging, setDragging] = useState(false);
+  const [openError, setOpenError] = useState<string | null>(null);
+  const basicInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => applyTheme(settings.theme), [settings.theme]);
   useEffect(() => {
@@ -66,13 +93,19 @@ export function Home() {
     e.preventDefault();
     setDragging(false);
     const item = e.dataTransfer.items[0];
+    const file = e.dataTransfer.files[0];
     const getHandle = (item as DataTransferItem & { getAsFileSystemHandle?: () => Promise<FileSystemHandle | null> })?.getAsFileSystemHandle;
-    if (!item || !getHandle) return;
-    const h = await getHandle.call(item);
-    if (h && h.kind === 'file') {
-      const rec = await rememberHandle(h as FileSystemFileHandle);
-      location.href = viewerUrl(`file=${encodeURIComponent(rec.id)}`);
+    try {
+      const h = item && getHandle ? await getHandle.call(item) : null;
+      if (h && h.kind === 'file') {
+        const rec = await rememberHandle(h as FileSystemFileHandle);
+        location.href = viewerUrl(`file=${encodeURIComponent(rec.id)}`);
+        return;
+      }
+    } catch (err) {
+      console.error('Review Pen: drop failed, using the basic picker path', err);
     }
+    if (file) setOpenError(await openUploaded(file));
   }, []);
 
   return (
@@ -90,12 +123,37 @@ export function Home() {
         <h1>Review Pen</h1>
         <p className="lede">Mark up long documents, then copy one precise prompt that tells your AI exactly what to change and where.</p>
         <div className="hero-actions">
-          <button type="button" className="btn btn-primary btn-lg" onClick={() => void pickFile()}>
+          <button type="button" className="btn btn-primary btn-lg" onClick={() => void pickFile().then(setOpenError)}>
             <IconFile size={16} /> Open a Markdown file
           </button>
           <a className="btn btn-lg" href={viewerUrl('demo=1')}>Try the guided demo</a>
         </div>
-        <p className="muted small">Or drop a .md file anywhere on this page.</p>
+        <p className="muted small">
+          Or drop a .md file anywhere on this page. Button not working?{' '}
+          <button type="button" className="link-btn" onClick={() => basicInput.current?.click()}>
+            Use the basic file picker
+          </button>
+          .
+        </p>
+        <input
+          ref={basicInput}
+          type="file"
+          hidden
+          accept=".md,.markdown,.mdown,.mkd,.txt,text/markdown,text/plain"
+          onChange={async (e) => {
+            const f = e.currentTarget.files?.[0];
+            e.currentTarget.value = '';
+            if (f) setOpenError(await openUploaded(f));
+          }}
+        />
+        {openError ? (
+          <div className="open-error" role="alert">
+            <p>{openError}</p>
+            <button type="button" className="btn btn-sm" onClick={() => basicInput.current?.click()}>
+              Choose the file with the basic picker
+            </button>
+          </div>
+        ) : null}
       </header>
 
       <section className="home-grid">
@@ -146,7 +204,7 @@ export function Home() {
                 const open = s.annotations.filter((a) => a.status !== 'resolved').length;
                 return (
                   <li key={s.docKey}>
-                    <button type="button" className="recent-open" disabled={!url} onClick={() => url && void navigate(url)}>
+                    <button type="button" className="recent-open" disabled={!url} title={url ? undefined : "Opened with the basic file picker. Open the same file again to continue this review."} onClick={() => url && void navigate(url)}>
                       <span className="recent-title" dir="auto">{s.title}</span>
                       <span className="muted small" dir="auto">
                         {open} open · {s.annotations.length} total · {new Date(s.updatedAt).toLocaleDateString()} · {s.filePath}

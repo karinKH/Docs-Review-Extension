@@ -1,7 +1,7 @@
 import { memo } from 'react';
 import { directionOf, type OutlineEntry } from '../../core/markdown/pipeline';
 import type { Annotation } from '../../core/types';
-import { IconCheck } from './Icons';
+import { IconCheck, IconComment } from './Icons';
 
 interface Props {
   outline: OutlineEntry[];
@@ -9,10 +9,11 @@ interface Props {
   reviewed: string[];
   activeSlug: string | null;
   onJump: (entry: OutlineEntry) => void;
+  onCommentSection: (entry: OutlineEntry, rect: { top: number; bottom: number; left: number; right: number }) => void;
   onToggleReviewed: (slug: string) => void;
 }
 
-function TocImpl({ outline, annotations, reviewed, activeSlug, onJump, onToggleReviewed }: Props) {
+function TocImpl({ outline, annotations, reviewed, activeSlug, onJump, onCommentSection, onToggleReviewed }: Props) {
   const minDepth = outline.reduce((m, e) => Math.min(m, e.depth), 6);
   const done = outline.filter((e) => reviewed.includes(e.slug)).length;
   const pct = outline.length ? Math.round((done / outline.length) * 100) : 0;
@@ -47,6 +48,19 @@ function TocImpl({ outline, annotations, reviewed, activeSlug, onJump, onToggleR
               </button>
               <button type="button" className="toc-link" onClick={() => onJump(e)} title={e.text}>
                 <bdi dir={directionOf(e.text) === 'rtl' ? 'rtl' : 'ltr'}>{e.text || 'Untitled'}</bdi>
+              </button>
+              <button
+                type="button"
+                className="toc-comment"
+                title="Comment on this whole section"
+                aria-label={`Comment on the section ${e.text}`}
+                onClick={(ev) => {
+                  const r = ev.currentTarget.getBoundingClientRect();
+                  onJump(e);
+                  onCommentSection(e, { top: r.top, bottom: r.bottom, left: r.right + 8, right: r.right + 8 });
+                }}
+              >
+                <IconComment size={13} />
               </button>
               {count ? <span className="toc-count" title={`${count} open comment${count === 1 ? '' : 's'}`}>{count}</span> : null}
             </li>

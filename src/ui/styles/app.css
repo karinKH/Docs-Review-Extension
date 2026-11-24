@@ -273,6 +273,23 @@ kbd {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.toc-comment {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-3);
+  padding: 0;
+  cursor: pointer;
+  opacity: 0;
+}
+.toc-item:hover .toc-comment, .toc-comment:focus-visible { opacity: 1; }
+.toc-comment:hover { color: var(--accent); background: var(--accent-soft); }
+.md h1, .md h2, .md h3, .md h4, .md h5, .md h6 { cursor: pointer; }
 .toc-count {
   flex: none;
   margin-inline-end: 6px;
@@ -641,3 +658,15 @@ kbd {
 .center-card h1 { margin: 4px 0 0; font-size: 20px; }
 .center-card p { margin: 0; }
 .error-text { color: var(--danger); display: flex; gap: 6px; align-items: center; }
+
+.link-btn { border: 0; background: none; padding: 0; color: var(--accent); cursor: pointer; text-decoration: underline; font: inherit; }
+.open-error {
+  margin: 12px auto 0;
+  max-width: 520px;
+  padding: 10px 14px;
+  border: 1px solid color-mix(in srgb, var(--danger, #d33) 40%, transparent);
+  background: color-mix(in srgb, var(--danger, #d33) 8%, transparent);
+  border-radius: var(--r-md);
+  text-align: center;
+}
+.open-error p { margin: 0 0 8px; }

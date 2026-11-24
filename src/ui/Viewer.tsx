@@ -311,6 +311,11 @@ export function Viewer({ source, identity, onReload }: Props) {
     [docCtx, source, settings.defaultPriority],
   );
 
+  const commentOnSection = useCallback(
+    (entry: OutlineEntry, rect: Rect) => openComposerFor(entry.start, entry.sectionEnd, 'section', rect),
+    [openComposerFor],
+  );
+
   const commentOnSelection = useCallback(() => {
     if (!scoped) return;
     const sel = window.getSelection();
@@ -599,7 +604,10 @@ export function Viewer({ source, identity, onReload }: Props) {
       }
       const tr = target.getBoundingClientRect();
       const wr = wrap.getBoundingClientRect();
-      const left = root.getBoundingClientRect().left - wr.left - 34;
+      const rr = root.getBoundingClientRect();
+      // Right-to-left blocks start on the right, so the handle goes in the right margin.
+      const rtl = view === 'rendered' && getComputedStyle(target).direction === 'rtl';
+      const left = rtl ? rr.right - wr.left + 8 : rr.left - wr.left - 34;
       setHandle({ top: tr.top - wr.top + (isHeading ? 6 : 2), left, start: s, end: en, section: isHeading });
     },
     [composer, view, rendered.outline],
@@ -625,13 +633,25 @@ export function Viewer({ source, identity, onReload }: Props) {
           offset = r.startOffset;
         }
       }
-      if (!root || !node || !root.contains(node)) return;
-      const off = domPointToSource(docCtx, root, node, offset, 'start');
-      if (off === null) return;
-      const hits = visible.filter((a) => a.anchor.start <= off && off < a.anchor.end).sort((a, b) => a.anchor.end - a.anchor.start - (b.anchor.end - b.anchor.start));
-      if (hits[0]) editAnnotation(hits[0]);
+      if (!root) return;
+      const off = node && root.contains(node) ? domPointToSource(docCtx, root, node, offset, 'start') : null;
+      const hits = off === null ? [] : visible.filter((a) => a.anchor.start <= off && off < a.anchor.end).sort((a, b) => a.anchor.end - a.anchor.start - (b.anchor.end - b.anchor.start));
+      if (hits[0]) {
+        editAnnotation(hits[0]);
+        return;
+      }
+      // A click on a heading selects its whole section, ready to comment on.
+      const heading = (e.target as HTMLElement).closest('h1, h2, h3, h4, h5, h6');
+      if (view === 'rendered' && heading && root.contains(heading)) {
+        const start = Number(heading.getAttribute('data-sp')?.split(':')[0]);
+        const entry = rendered.outline.find((o) => o.start === start);
+        if (entry) {
+          scopeStack.current = [];
+          applyScope({ start: entry.start, end: entry.sectionEnd, scope: 'section', label: `Section: ${entry.text}` });
+        }
+      }
     },
-    [session, composer, docCtx, visible, editAnnotation],
+    [session, composer, docCtx, visible, editAnnotation, view, rendered.outline, applyScope],
   );
 
   if (!session || !settingsReady) {
@@ -666,7 +686,7 @@ export function Viewer({ source, identity, onReload }: Props) {
       />
 
       <aside className="toc" aria-hidden={!settings.tocOpen}>
-        <Toc outline={rendered.outline} annotations={session.annotations} reviewed={session.reviewed} activeSlug={activeSlug} onJump={jumpToEntry} onToggleReviewed={(slug) => commit((s) => toggleReviewed(s, slug))} />
+        <Toc outline={rendered.outline} annotations={session.annotations} reviewed={session.reviewed} activeSlug={activeSlug} onJump={jumpToEntry} onCommentSection={commentOnSection} onToggleReviewed={(slug) => commit((s) => toggleReviewed(s, slug))} />
       </aside>
 
       <main className="doc-scroll" ref={scrollRef} onMouseLeave={() => setHandle(null)}>
