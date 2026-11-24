@@ -1,6 +1,7 @@
 // Deterministic prompt compiler: the same session and options always produce
 // byte-identical output. No dates, no randomness, stable ordering.
 
+import { sheetCellRef } from '../google/convert';
 import YAML from 'yaml';
 import {
   INTENT_LABELS,
@@ -145,6 +146,8 @@ function toItem(a: Annotation, source: string): ItemView {
   const section = an.headingPath.length ? an.headingPath.join(' > ') : '(before the first heading)';
   const block = BLOCK_LABELS[an.blockKind] ?? (an.blockKind === 'document' ? 'document' : an.blockKind);
   const parts = [lineLabel(an.startLine, an.endLine), `section: ${section}`];
+  const cell = sheetCellRef(source, an);
+  if (cell) parts.push(`cell ${cell}`);
   if (an.scope === 'section') parts.push('whole section');
   else if (an.scope === 'document') parts.push('whole document');
   else if (an.blockOrdinal && an.blockKind !== 'document' && an.blockKind !== 'heading') parts.push(`${block} ${an.blockOrdinal} of its section`);
