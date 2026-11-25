@@ -34,18 +34,21 @@ Select a word, a sentence, a paragraph or a whole section. Say what should chang
 - **Keyboard first.** **Ctrl+K** opens a command palette: type to run any action, jump to a section, or find a comment. Press **?** in the viewer for every shortcut.
 - **Accessible.** Every control has a label, menus and dialogs work with the keyboard, and colours meet WCAG AA contrast in light and dark themes (checked automatically with axe on every test run).
 
-## Install (from source, for now)
+## Install in 2 minutes (no coding needed)
 
-Review Pen is not on the Chrome Web Store yet. To try it:
+1. **Download** [review-pen-chrome.zip](https://github.com/karinKH/Docs-Review-Extension/releases/latest/download/review-pen-chrome.zip).
+   (Not the green **Code ▸ Download ZIP** button: that is the source code, not the ready extension.)
+2. **Unzip it** and keep the folder somewhere permanent, for example in Documents. Chrome runs the extension from this folder, so deleting it removes the extension.
+   - Windows: right-click the file ▸ **Extract All** ▸ **Extract**.
+   - Mac: double-click the file.
+3. **Add it to Chrome.** Type `chrome://extensions` in the address bar and press Enter. Turn on **Developer mode** (top right). Click **Load unpacked** and choose the unzipped folder (the one with `manifest.json` inside).
+4. **Pin it.** Click the puzzle-piece icon next to the address bar, then the pin next to **Review Pen**. The welcome page has a two-minute guided demo.
 
-1. Install [Node.js](https://nodejs.org/) 22 or newer.
-2. In a terminal, inside this folder:
-   ```sh
-   npm install
-   npm run build
-   ```
-3. Open `chrome://extensions` in Chrome, turn on **Developer mode** (top right), click **Load unpacked** and choose the `.output/chrome-mv3` folder.
-4. The welcome page opens. Click **Try the guided demo** to learn the basics in two minutes.
+Works the same in Edge (`edge://extensions`) and Brave (`brave://extensions`).
+
+**Updating:** download the new zip, replace the folder's contents with it, then click the circular reload arrow on Review Pen's card in `chrome://extensions`. Your reviews are kept.
+
+**Good to know:** Chrome calls this a "developer mode" extension because it was not installed from the Chrome Web Store, and may remind you of that now and then. It is the same extension. Only download it from this repository's Releases page.
 
 ### Optional setup
 
@@ -92,6 +95,8 @@ In plain terms: Review Pen treats every document as untrusted, keeps everything 
 Found a security problem? Please report it privately through this repository's **Security** tab rather than in a public issue.
 
 ## Development
+
+To build it yourself instead of downloading: install [Node.js](https://nodejs.org/) 22 or newer, run `npm install` and `npm run build`, then load the `.output/chrome-mv3` folder with **Load unpacked** as above. To publish a new downloadable version, raise `version` in `package.json`, merge, and push a tag such as `v0.2.0`: the Release workflow builds, tests and attaches `review-pen-chrome.zip`.
 
 ```sh
 npm install          # also generates WXT types
