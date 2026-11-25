@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Theme } from '../lib/settings';
-import { IconAuto, IconCopy, IconKeyboard, IconMoon, IconMore, IconPanel, IconPen, IconRedo, IconRefresh, IconSettings, IconSun, IconToc, IconUndo } from './Icons';
+import { IconAuto, IconCopy, IconKeyboard, IconMoon, IconMore, IconPanel, IconPen, IconPrinter, IconRedo, IconRefresh, IconSettings, IconSun, IconToc, IconUndo } from './Icons';
 
 export interface MenuItem {
   label: string;
@@ -93,6 +93,8 @@ interface Props {
   onShortcuts: () => void;
   onSettings: () => void;
   onCopy: () => void;
+  /** Annotated PDF (opens Chrome's print dialog; choose "Save as PDF"). */
+  onPdf: () => void;
   onReload?: () => void;
   openCount: number;
   menu: MenuItem[];
@@ -129,6 +131,9 @@ export function Header(p: Props) {
         <button type="button" className="icon-btn" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts" onClick={p.onShortcuts}><IconKeyboard /></button>
         <button type="button" className="icon-btn" title="Settings" aria-label="Settings" onClick={p.onSettings}><IconSettings /></button>
         <Menu items={p.menu} />
+        <button type="button" className="btn" onClick={p.onPdf} title="Download the annotated PDF (Ctrl+P), then choose Save as PDF">
+          <IconPrinter size={15} /> PDF
+        </button>
         <button type="button" className="btn btn-primary" onClick={p.onCopy} disabled={p.openCount === 0} title="Copy prompt (Ctrl+Shift+C)">
           <IconCopy size={15} /> Copy prompt
           {p.openCount ? <span className="btn-count">{p.openCount}</span> : null}

@@ -156,8 +156,7 @@ test('Slides: a box on the slide, with a screenshot, shows up in the review, pro
   expect([...zip['review-pen-comment-1.png']!.slice(1, 4)].map((c) => String.fromCharCode(c)).join('')).toBe('PNG');
 
   // The annotated PDF has a section for them, with the screenshot.
-  await review.locator('.doc-wrap').click({ position: { x: 5, y: 5 } });
-  await review.keyboard.press('Control+p');
+  await review.getByRole('button', { name: 'PDF', exact: true }).click();
   await expect.poll(() => review.evaluate(() => localStorage.getItem('printed'))).toBe('1');
   const printed = review.locator('#print-root .ponpage');
   await expect(printed.locator('h2')).toHaveText('On the Google page');

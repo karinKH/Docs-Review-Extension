@@ -968,6 +968,7 @@ export function Viewer({ source, identity, onReload, onNewSource, onWriteFile, w
         onShortcuts={() => setDialog('shortcuts')}
         onSettings={() => setDialog('settings')}
         onCopy={copyPrompt}
+        onPdf={printPdf}
         onReload={onReload}
         openCount={openCount}
         menu={menu}
