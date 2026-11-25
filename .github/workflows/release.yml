@@ -1,0 +1,43 @@
+# Publishes a ready-to-install download when a version tag (v1.2.3) is pushed.
+# It builds and tests exactly that commit, then attaches review-pen-chrome.zip
+# to a GitHub Release, so people can install without any developer tools.
+# Uses only the repository's built-in token; no other secrets.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Tag must match package.json version
+        run: |
+          v="v$(node -p "require('./package.json').version")"
+          if [ "$v" != "$GITHUB_REF_NAME" ]; then echo "Tag $GITHUB_REF_NAME does not match package.json ($v)"; exit 1; fi
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: npm run build:e2e
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test
+      - run: npm run zip
+      - name: Create the release with the download
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp .output/review-pen-*-chrome.zip review-pen-chrome.zip
+          gh release create "$GITHUB_REF_NAME" review-pen-chrome.zip \
+            --title "Review Pen $GITHUB_REF_NAME" \
+            --notes "Download **review-pen-chrome.zip** below, unzip it, and load the folder in chrome://extensions with Developer mode on and **Load unpacked**. Step-by-step: see the README."
