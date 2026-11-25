@@ -30,6 +30,8 @@ export function parseGoogleUrl(raw: string): GoogleRef | null {
   return { kind: KIND[m[1]!]!, id: m[3]!, gid: gid && /^\d+$/.test(gid) ? gid : null, authuser: au && /^\d{1,2}$/.test(au) ? au : null };
 }
 
+export const KIND_TITLES: Record<GoogleKind, string> = { doc: 'Google Doc', sheet: 'Google Sheet', slides: 'Google Slides deck' };
+
 export function isGoogleUrl(raw: string): boolean {
   return parseGoogleUrl(raw) !== null;
 }
@@ -42,6 +44,16 @@ export function googleDocKey(ref: GoogleRef): string {
 export function googleEditUrl(ref: GoogleRef): string {
   const path = { doc: 'document', sheet: 'spreadsheets', slides: 'presentation' }[ref.kind];
   return `https://docs.google.com/${path}/d/${ref.id}/edit`;
+}
+
+/** The Google address for a saved review key ("google:slides:<id>"), going to the slide or tab of a pin when known. */
+export function googleUrlForKey(docKey: string, at?: { slideId?: string | null; sheetGid?: string | null }): string | null {
+  const m = /^google:(doc|sheet|slides):([A-Za-z0-9_-]{20,128})$/.exec(docKey);
+  if (!m) return null;
+  const url = googleEditUrl({ kind: m[1] as GoogleKind, id: m[2]!, gid: null, authuser: null });
+  if (at?.slideId && /^[\w.-]{1,120}$/.test(at.slideId)) return `${url}#slide=id.${at.slideId}`;
+  if (at?.sheetGid && /^\d{1,12}$/.test(at.sheetGid)) return `${url}#gid=${at.sheetGid}`;
+  return url;
 }
 
 export interface ExportCandidate {

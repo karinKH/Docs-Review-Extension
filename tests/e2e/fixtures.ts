@@ -5,16 +5,18 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 export const extensionPath = fileURLToPath(new URL('../../.output/chrome-mv3', import.meta.url));
+/** The browser-test build (npm run build:e2e): same code, plus site access a toolbar click would grant. */
+export const e2eExtensionPath = fileURLToPath(new URL('../../.output/chrome-mv3-e2e', import.meta.url));
 
-export const test = base.extend<{ context: BrowserContext; extensionId: string; errors: string[] }>({
-  // eslint-disable-next-line no-empty-pattern
-  context: async ({}, use) => {
+export const test = base.extend<{ context: BrowserContext; extensionId: string; errors: string[]; extensionDir: string }>({
+  extensionDir: [extensionPath, { option: true }],
+  context: async ({ extensionDir }, use) => {
     const userDataDir = mkdtempSync(path.join(tmpdir(), 'rp-e2e-'));
     const context = await chromium.launchPersistentContext(userDataDir, {
       channel: 'chromium',
       headless: true,
       viewport: { width: 1440, height: 900 },
-      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`],
+      args: [`--disable-extensions-except=${extensionDir}`, `--load-extension=${extensionDir}`],
     });
     await context.grantPermissions(['clipboard-read', 'clipboard-write']);
     await use(context);

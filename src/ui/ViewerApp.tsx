@@ -4,6 +4,7 @@ import { loadFromParams, loadPicked, MAX_BYTES, type LoadResult } from './lib/lo
 import { handoffKey, uploadKey, type Upload } from '../core/handoff';
 import { getHandle } from './lib/db';
 import { GOOGLE_ORIGINS } from './lib/google';
+import { isGoogleUrl } from '../core/google/urls';
 import { applyTheme, useSettings } from './lib/settings';
 import { Viewer } from './Viewer';
 import { Home } from './Home';
@@ -185,6 +186,7 @@ export function ViewerApp() {
           >
             Allow and open
           </button>
+          <PageOnlyLink params={params} />
         </Centered>
       );
     case 'reload-file':
@@ -207,7 +209,21 @@ export function ViewerApp() {
       return (
         <Centered title="Could not open this document">
           <p className="error-text"><IconWarn size={15} /> {state.message}</p>
+          <PageOnlyLink params={params} />
         </Centered>
       );
   }
+}
+
+/** For a Google file: open just the pins and boxes placed on its page, without a text copy. */
+function PageOnlyLink({ params }: { params: URLSearchParams }) {
+  const src = params.get('src');
+  if (!src || !isGoogleUrl(src) || params.get('pageonly')) return null;
+  const q = new URLSearchParams(params);
+  q.set('pageonly', '1');
+  return (
+    <p className="muted small">
+      <a href={`?${q}`}>Show only the comments made on the Google page</a> (no download).
+    </p>
+  );
 }

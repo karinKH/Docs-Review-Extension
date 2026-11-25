@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { ON_PAGE_SECTION } from '../../core/session';
 import { INTENTS, INTENT_LABELS, PRIORITIES, PRIORITY_LABELS, type Anchor, type Intent, type Mode, type Priority, type Status } from '../../core/types';
 import { IconTrash, IconX, IconCheck } from './Icons';
 
@@ -26,6 +27,8 @@ interface Props {
 const WIDTH = 400;
 
 export function locationLabel(a: Anchor): string {
+  // Pins and boxes on the Google page: their placeholder anchor carries the place in words.
+  if (!a.exact && a.headingPath[0] === ON_PAGE_SECTION) return a.displayText ?? ON_PAGE_SECTION;
   const lines = a.startLine === a.endLine ? `Line ${a.startLine}` : `Lines ${a.startLine}–${a.endLine}`;
   const path = a.headingPath.length ? a.headingPath[a.headingPath.length - 1] : 'Top of document';
   return `${lines} · ${path}`;
@@ -103,9 +106,11 @@ export function CommentPopover({ number, anchor, initial, status, rect, macros, 
           <IconX />
         </button>
       </div>
-      <blockquote className="pop-quote" dir="auto">
-        {excerpt}
-      </blockquote>
+      {anchor.exact ? (
+        <blockquote className="pop-quote" dir="auto">
+          {excerpt}
+        </blockquote>
+      ) : null}
 
       <div className="field-label">Intent</div>
       <div className="chips" role="radiogroup" aria-label="Intent">
@@ -125,14 +130,14 @@ export function CommentPopover({ number, anchor, initial, status, rect, macros, 
             </button>
           ))}
         </div>
-        <div className="seg" role="radiogroup" aria-label="Comment type">
+        {anchor.exact ? <div className="seg" role="radiogroup" aria-label="Comment type">
           <button type="button" role="radio" aria-checked={d.mode === 'instruction'} className={`seg-btn${d.mode === 'instruction' ? ' on' : ''}`} onClick={() => setD({ ...d, mode: 'instruction' })} title="Describe the change; the AI decides the wording">
             Instruction
           </button>
           <button type="button" role="radio" aria-checked={d.mode === 'replace'} className={`seg-btn${d.mode === 'replace' ? ' on' : ''}`} onClick={() => setD({ ...d, mode: 'replace', replacement: d.replacement || anchor.exact })} title="Write the exact new text; applied literally">
             Exact text
           </button>
-        </div>
+        </div> : null}
       </div>
 
       {d.mode === 'replace' ? (

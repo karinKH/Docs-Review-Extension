@@ -35,6 +35,10 @@ export function preflight(session: Session, list: Annotation[] = session.annotat
 
   for (const a of sorted) {
     const text = a.body.trim();
+    if (a.visual) {
+      if (!text) issues.push({ level: 'error', code: 'empty-instruction', numbers: [a.number], message: `#${a.number} (on the Google page) has no comment. Say what should change.` });
+      continue;
+    }
     if (!a.anchor.exact.trim()) {
       issues.push({ level: 'error', code: 'empty-quote', numbers: [a.number], message: `#${a.number} points at empty text. Delete it and comment again.` });
     }
@@ -65,7 +69,7 @@ export function preflight(session: Session, list: Annotation[] = session.annotat
     for (let j = i + 1; j < sorted.length; j++) {
       const a = sorted[i]!;
       const b = sorted[j]!;
-      if (!overlaps(a, b)) continue;
+      if (a.visual || b.visual || !overlaps(a, b)) continue;
       const reason = conflictReason(a, b);
       if (reason) {
         issues.push({ level: 'warning', code: 'conflict', numbers: [a.number, b.number], message: `#${a.number} and #${b.number} overlap: ${reason}.` });

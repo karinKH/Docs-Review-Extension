@@ -13,7 +13,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "npm run build && playwright test",
+    "build:e2e": "wxt build --mode e2e",
+    "test:e2e": "npm run build && npm run build:e2e && playwright test",
     "notices": "node scripts/third-party-notices.mjs"
   },
   "dependencies": {

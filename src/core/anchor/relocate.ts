@@ -106,6 +106,11 @@ export function relocateAll(ctx: DocContext, annotations: Annotation[], oldSourc
   };
 
   for (const a of annotations) {
+    // Pins and boxes on the Google page don't point at text; they stay as they are.
+    if (a.visual) {
+      res.annotations.push(a);
+      continue;
+    }
     const scope = a.anchor.scope;
     const reanchor = (start: number, end: number, match: MatchInfo): Annotation => {
       const fresh = createAnchor(ctx, start, end, scope, match.state === 'unchanged' || match.state === 'moved' ? a.anchor.displayText : ctx.source.slice(start, end));
@@ -162,5 +167,6 @@ function round2(n: number): number {
 
 /** True when the annotation's saved offsets still point at its quoted text. */
 export function isAnchored(source: string, a: Annotation): boolean {
+  if (a.visual) return false;
   return a.match?.state !== 'lost' && source.slice(a.anchor.start, a.anchor.end) === a.anchor.exact;
 }

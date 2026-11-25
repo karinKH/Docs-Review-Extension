@@ -12,10 +12,11 @@ import {
   type Priority,
   type Session,
   type Status,
+  type VisualAnchor,
 } from '../types';
 import { countOccurrences } from '../anchor/anchor';
 import { LineIndex } from '../text/lines';
-import { inDocumentOrder, referencedNumbers } from '../session';
+import { inDocumentOrder, ON_PAGE_SECTION, referencedNumbers, screenshotName, visualLocation } from '../session';
 import { fence, renderTemplate } from './template';
 import { approxTokens } from './tokens';
 
@@ -107,6 +108,11 @@ export interface ItemView {
   instruction: string;
   replacement: string;
   references: number[];
+  /** Left on the Google page (a pin or box), not on quoted text. */
+  isVisual: boolean;
+  /** File name of the screenshot to attach, or "" when there is none. */
+  screenshot: string;
+  visual: VisualAnchor | null;
 }
 
 export interface DocView {
@@ -142,6 +148,7 @@ function lineLabel(a: number, b: number): string {
 }
 
 function toItem(a: Annotation, source: string): ItemView {
+  if (a.visual) return toVisualItem(a, a.visual);
   const an = a.anchor;
   const section = an.headingPath.length ? an.headingPath.join(' > ') : '(before the first heading)';
   const block = BLOCK_LABELS[an.blockKind] ?? (an.blockKind === 'document' ? 'document' : an.blockKind);
@@ -185,7 +192,54 @@ function toItem(a: Annotation, source: string): ItemView {
     instruction,
     replacement: a.replacement,
     references: referencedNumbers(a.body),
+    isVisual: false,
+    screenshot: '',
+    visual: null,
   };
+}
+
+function toVisualItem(a: Annotation, v: VisualAnchor): ItemView {
+  const location = visualLocation(v) + (v.nearText ? ` · cell shows: "${v.nearText.slice(0, 120)}"` : '');
+  return {
+    number: a.number,
+    intent: a.intent,
+    intentLabel: INTENT_LABELS[a.intent],
+    priority: a.priority,
+    priorityLabel: PRIORITY_LABELS[a.priority],
+    mode: 'instruction',
+    isReplace: false,
+    status: a.status,
+    isRetry: a.status === 'retry',
+    aiReply: a.aiReply ?? '',
+    startLine: 0,
+    endLine: 0,
+    lines: '',
+    headingPath: [ON_PAGE_SECTION],
+    section: ON_PAGE_SECTION,
+    topSection: ON_PAGE_SECTION,
+    block: 'on the page',
+    blockOrdinal: null,
+    location,
+    original: '',
+    originalForDisplay: '',
+    isExcerpt: false,
+    prefix: '',
+    suffix: '',
+    occurrences: 0,
+    ambiguous: false,
+    instruction: a.body.trim(),
+    replacement: '',
+    references: referencedNumbers(a.body),
+    isVisual: true,
+    screenshot: v.imageId ? screenshotName(a.number) : '',
+    visual: v,
+  };
+}
+
+function visualLines(it: ItemView): string[] {
+  const out = ['This comment was left on the Google page itself (design or layout), not on a quote.'];
+  if (it.screenshot) out.push(`Screenshot: ${it.screenshot} (attached; the commented area is outlined).`);
+  return out;
 }
 
 export function buildModel(session: Session, options: CompileOptions): PromptModel {
@@ -249,6 +303,7 @@ function agentPreset(m: PromptModel): string {
   out.push('6. "Question - do not edit" items need an answer only. Do not change the file for them.');
   out.push('7. References such as #3 point to other items in this list.');
   out.push('8. When you finish, reply with one line per item: "#<n> done", "#<n> skipped: <reason>" or "#<n> answer: <answer>".');
+  if (m.items.some((i) => i.isVisual)) out.push(`9. Items under "${ON_PAGE_SECTION}" were placed on the page, not on text. Their location names the slide, page or cell and the area on it; screenshots, when listed, are attached. If you cannot see the layout, say what you would change and mark the item skipped.`);
   if (m.directives.length) {
     out.push('');
     out.push('## Document-wide instructions');
@@ -263,7 +318,9 @@ function agentPreset(m: PromptModel): string {
     out.push('');
     out.push(`Location: ${it.location}`);
     out.push('');
-    if (it.isReplace) {
+    if (it.isVisual) {
+      out.push(...visualLines(it));
+    } else if (it.isReplace) {
       out.push('Replace this text:');
       out.push(fence(it.original, 'text'));
       out.push('With this text:');
@@ -313,6 +370,7 @@ function chatPreset(m: PromptModel, options: CompileOptions): string {
   out.push("- Other comments need your judgment. Keep the document's language, tone and formatting.");
   out.push('- Comments with intent "question" need an answer only. Do not edit the document for them.');
   out.push('- References such as #3 point to other comments.');
+  if (m.items.some((i) => i.isVisual)) out.push('- Comments of type "on-page" were placed on the page layout, not on text. <location> names the slide, page or cell and the area; <screenshot>, when present, names an attached image with that area outlined.');
   if (options.chatOutput === 'full') {
     out.push('- Return the complete revised document in a single Markdown code block. After it, list every comment number with "done", "skipped: <reason>" or "answer: <answer>".');
   } else {
@@ -334,10 +392,12 @@ function chatPreset(m: PromptModel, options: CompileOptions): string {
   out.push('');
   out.push('<comments>');
   for (const it of m.items) {
-    const type = it.isReplace ? 'exact-replacement' : 'instruction';
+    const type = it.isVisual ? 'on-page' : it.isReplace ? 'exact-replacement' : 'instruction';
     out.push(`<comment id="${it.number}" intent="${it.intent}" priority="${it.priority}" type="${type}">`);
     out.push(xmlText('location', it.location));
-    out.push(xmlText('original_text', it.isReplace ? it.original : it.originalForDisplay));
+    if (it.isVisual) {
+      if (it.screenshot) out.push(xmlText('screenshot', it.screenshot));
+    } else out.push(xmlText('original_text', it.isReplace ? it.original : it.originalForDisplay));
     if (it.ambiguous) {
       out.push(xmlText('text_before', it.prefix));
       out.push(xmlText('text_after', it.suffix));
@@ -380,7 +440,20 @@ function structured(m: PromptModel) {
         block: it.block,
         blockOrdinal: it.blockOrdinal,
       },
-      target: { type: 'TextQuoteSelector', exact: it.original, prefix: it.prefix, suffix: it.suffix },
+      target: it.visual
+        ? {
+            type: 'VisualSelector',
+            app: it.visual.app,
+            relativeTo: it.visual.relativeTo,
+            box: it.visual.box,
+            slideId: it.visual.slideId ?? null,
+            slideNumber: it.visual.slideNumber ?? null,
+            page: it.visual.page ?? null,
+            sheet: it.visual.sheetName ?? null,
+            cell: it.visual.cell ?? null,
+            screenshot: it.screenshot || null,
+          }
+        : { type: 'TextQuoteSelector', exact: it.original, prefix: it.prefix, suffix: it.suffix },
       occurrences: it.occurrences,
       instruction: it.instruction || null,
       replacement: it.isReplace ? it.replacement : null,

@@ -2,7 +2,7 @@
 // file, and load it back. Imported files come from outside, so every field is
 // checked against a strict shape before anything uses it. Nothing is evaluated.
 
-import { INTENTS, MATCH_STATES, MAX_ROUND_HUNKS, PRIORITIES, STATUSES, type Annotation, type Anchor, type Round, type Session } from './types';
+import { INTENTS, MATCH_STATES, MAX_ROUND_HUNKS, PRIORITIES, STATUSES, type Annotation, type Anchor, type Round, type Session, type VisualAnchor } from './types';
 import { fingerprint } from './text/hash';
 
 export const REVIEW_FILE_FORMAT = 'review-pen/review-file@1';
@@ -70,6 +70,28 @@ function readAnchor(v: unknown): Anchor {
   };
 }
 
+const optStr = (o: Obj, k: string, max = 500): string | null => (typeof o[k] === 'string' ? (o[k] as string).slice(0, max) : null);
+const optNum = (o: Obj, k: string): number | null => (typeof o[k] === 'number' && Number.isFinite(o[k]) ? (o[k] as number) : null);
+const frac = (o: Obj, k: string): number => Math.min(1, Math.max(0, num(o, k)));
+
+export function readVisual(v: unknown): VisualAnchor {
+  if (!isObj(v) || !isObj(v.box)) throw new ReviewFileError('A comment on the Google page is not readable.');
+  const b = v.box;
+  return {
+    app: oneOf(v, 'app', ['doc', 'sheet', 'slides'] as const),
+    relativeTo: oneOf(v, 'relativeTo', ['slide', 'page', 'viewport'] as const),
+    box: { x: frac(b, 'x'), y: frac(b, 'y'), w: frac(b, 'w'), h: frac(b, 'h') },
+    slideId: optStr(v, 'slideId', 200),
+    slideNumber: optNum(v, 'slideNumber'),
+    page: optNum(v, 'page'),
+    sheetGid: optStr(v, 'sheetGid', 40),
+    sheetName: optStr(v, 'sheetName', 200),
+    cell: optStr(v, 'cell', 40),
+    nearText: optStr(v, 'nearText', 2000),
+    imageId: optStr(v, 'imageId', 100),
+  };
+}
+
 function readAnnotation(v: unknown): Annotation {
   if (!isObj(v)) throw new ReviewFileError('A comment is not readable.');
   const a: Annotation = {
@@ -86,6 +108,7 @@ function readAnnotation(v: unknown): Annotation {
     updatedAt: num(v, 'updatedAt'),
   };
   if (typeof v.aiReply === 'string') a.aiReply = v.aiReply.slice(0, 100_000);
+  if (v.visual !== undefined) a.visual = readVisual(v.visual);
   if (isObj(v.match)) {
     const m = v.match;
     a.match = { state: oneOf(m, 'state', MATCH_STATES), confidence: num(m, 'confidence'), round: num(m, 'round') };

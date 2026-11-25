@@ -18,7 +18,7 @@ English
 
 Review Pen makes reviewing long AI-generated documents fast, and makes the AI's next revision accurate.
 
-Open a Markdown file, a raw GitHub link, or a Google Doc, Sheet or Slides deck. Select any text and press C to comment. Widen the selection to the sentence, paragraph or whole section with Alt + ↑. Mark each comment as a rewrite, deletion, expansion, fact-check or question, with a priority.
+Open a Markdown file, a raw GitHub link, or a Google Doc, Sheet or Slides deck. Select any text and press C to comment. Widen the selection to the sentence, paragraph or whole section with Alt + ↑. Mark each comment as a rewrite, deletion, expansion, fact-check or question, with a priority. On a Google page you can also pin design and layout comments straight onto the slide, page or cell, each with a screenshot of the area.
 
 Then copy one prompt. Every item carries the exact quoted text, the words around it, line numbers and the section, so the AI changes the right sentence and nothing else. Formats for coding agents (Claude Code, Cursor, Copilot), chat assistants, JSON, YAML, or your own template.
 
@@ -40,7 +40,7 @@ Review Pen lets you annotate documents and compile your annotations into a revis
 
 - **storage / unlimitedStorage:** Stores the user's reviews (comments and document versions) and settings locally in IndexedDB and extension storage. Long documents with several review rounds exceed the default quota.
 - **scripting:** Registers a content script, only on raw-Markdown hosts the user explicitly allowed, that passes the page's Markdown text to the extension's viewer. Also used, as a fallback, to read the export of a Google file from inside the Google tab the user opened.
-- **activeTab:** When the user clicks the toolbar button, reads the active tab's URL to open that Google Docs/Sheets/Slides file or Markdown page in the viewer.
+- **activeTab:** When the user clicks the toolbar button: reads the active tab's URL to open that Google Docs/Sheets/Slides file or Markdown page in the viewer; on a Google file, injects a small comment layer into that tab so the user can place pins and boxes on the page; and captures a screenshot of that tab (tabs.captureVisibleTab) for each pin or box, only while that tab is the one showing. Screenshots are stored locally in the extension's IndexedDB and never transmitted.
 - **Optional host permissions (raw.githubusercontent.com, gist.githubusercontent.com, gitlab.com):** Requested only when the user clicks "Allow these sites", to open raw Markdown files from those hosts.
 - **Optional host permissions (docs.google.com, *.googleusercontent.com):** Requested only when the user opens a Google file and clicks "Allow and open", to download Google's export of that one file (Google serves downloads from googleusercontent.com).
 - **Remote code:** No. All code is bundled in the package; the Content Security Policy forbids remote and inline scripts and eval.

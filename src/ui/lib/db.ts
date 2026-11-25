@@ -1,4 +1,4 @@
-import { migrateSession } from '../../core/session';
+import { mergeVisual, migrateSession } from '../../core/session';
 // Local storage for review sessions and opened-file handles (IndexedDB via Dexie).
 // Nothing here ever leaves the browser.
 
@@ -12,6 +12,16 @@ export interface FileHandleRecord {
   addedAt: number;
 }
 
+/** A screenshot of a pin or box on a Google page. Stays in this browser. */
+export interface ImageRecord {
+  id: string;
+  docKey: string;
+  blob: Blob;
+  width: number;
+  height: number;
+  createdAt: number;
+}
+
 export interface KV {
   key: string;
   value: unknown;
@@ -21,6 +31,7 @@ class ReviewDB extends Dexie {
   sessions!: EntityTable<Session, 'docKey'>;
   handles!: EntityTable<FileHandleRecord, 'id'>;
   kv!: EntityTable<KV, 'key'>;
+  images!: EntityTable<ImageRecord, 'id'>;
   constructor() {
     super('review-pen');
     this.version(1).stores({
@@ -28,6 +39,7 @@ class ReviewDB extends Dexie {
       handles: '&id, name, addedAt',
       kv: '&key',
     });
+    this.version(2).stores({ images: '&id, docKey, createdAt' });
   }
 }
 
@@ -42,12 +54,32 @@ export async function saveSession(s: Session): Promise<void> {
   await db.sessions.put(s);
 }
 
+/**
+ * Save, keeping any pin or box that was placed on the Google page since this
+ * review last looked (see mergeVisual). Returns what was saved.
+ */
+export async function saveSessionMerging(s: Session, seenVisual: ReadonlySet<string>): Promise<Session> {
+  return db.transaction('rw', db.sessions, async () => {
+    const raw = await db.sessions.get(s.docKey);
+    const merged = raw ? mergeVisual(s, migrateSession(raw), seenVisual, 'save') : s;
+    await db.sessions.put(merged);
+    return merged;
+  });
+}
+
 export async function listSessions(): Promise<Session[]> {
   return (await db.sessions.orderBy('updatedAt').reverse().toArray()).map(migrateSession);
 }
 
 export async function deleteSession(docKey: string): Promise<void> {
-  await db.sessions.delete(docKey);
+  await db.transaction('rw', db.sessions, db.images, async () => {
+    await db.sessions.delete(docKey);
+    await db.images.where('docKey').equals(docKey).delete();
+  });
+}
+
+export async function getImage(id: string): Promise<ImageRecord | undefined> {
+  return db.images.get(id);
 }
 
 /** Store a picked file handle, reusing the record if the same file was picked before. */

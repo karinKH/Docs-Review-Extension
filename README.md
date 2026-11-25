@@ -6,7 +6,7 @@ Select a word, a sentence, a paragraph or a whole section. Say what should chang
 
 > **Zero AI, zero servers.** Review Pen never calls an AI model, never needs an API key and never sends your document anywhere. Parsing, locating, prompt building and token counting all run inside your browser, and the same review always produces the same prompt.
 
-**Status:** step 1 of 4, the Markdown reviewer. Google Docs, Slides and Sheets, PDF export and multi-round reviews come next (see [Roadmap](#roadmap)).
+**Status:** all four planned steps are built and tested (see [Roadmap](#roadmap)). The Google page layer is tested against imitation pages only, so it still needs a check on real Google files.
 
 ---
 
@@ -29,7 +29,8 @@ Select a word, a sentence, a paragraph or a whole section. Say what should chang
 - **Exact text without AI.** Comments written as exact replacement text can be applied directly: written back into the file (Chrome asks for permission first) or downloaded with a `.patch` file for git. Zero tokens, no drift.
 - **Annotated PDF.** **Ctrl+P** (or More ▸ Annotated PDF) prints a copy with each comment's text marked, its number in superscript, a callout box with the comment after the paragraph, and a cover page with a summary and an index. Choose **Save as PDF** in Chrome's print dialog.
 - **Review files.** Save the whole review (comments, instructions, rounds) as a `.review.json` file to keep or share, and open it again later, on another computer too. Comments can also be exported as [W3C Web Annotations](https://www.w3.org/TR/annotation-model/). The prompt can be saved as a file.
-- **Google Docs, Sheets and Slides.** Click the Review Pen button in Chrome's toolbar while a Google file is open (or paste its link on the welcome page). Review Pen downloads Google's own export of that one file with your existing Google sign-in and converts it on your computer: Docs as Markdown, Sheets as one table per tab with row numbers and column letters (a comment on a cell names it in the prompt, for example `Budget!B7`, and formulas are listed), Slides as an outline with one section per slide and the speaker notes. It is a copy: you apply the changes in Google yourself (or paste the AI's revised text), and **Reload** fetches the new version as the next round. Review Pen does not draw on the Google page itself.
+- **Google Docs, Sheets and Slides.** Click the Review Pen button in Chrome's toolbar while a Google file is open (or paste its link on the welcome page). Review Pen downloads Google's own export of that one file with your existing Google sign-in and converts it on your computer: Docs as Markdown, Sheets as one table per tab with row numbers and column letters (a comment on a cell names it in the prompt, for example `Budget!B7`, and formulas are listed), Slides as an outline with one section per slide and the speaker notes. It is a copy: you apply the changes in Google yourself (or paste the AI's revised text), and **Reload** fetches the new version as the next round.
+- **Comments on the Google page itself (design and layout).** Clicking the Review Pen button on a Google tab shows a small toolbar on that page. **Pin** marks a spot, **Box** marks an area. Each comment records where it is (Slides: the slide; Docs: the page; Sheets: the tab and selected cell, plus what the cell shows) and a screenshot of that area with the area outlined. They join your text comments in the same review: the prompt lists them under "On the Google page" with the place in words and the screenshot's file name, the annotated PDF prints them with their screenshots, and **⋯ ▸ Download screenshots** saves the images with matching names, ready to attach to the AI chat. Without a text copy, the review page can show just these comments (no download at all). Limits, honestly: Review Pen finds the slide and the page by looking at Google's page structure, which Google can change without notice; when it can't recognise it, a pin is saved relative to the visible screen and marked "approximate". In Sheets, pins are listed but not drawn over the grid, because the grid moves as you scroll. Screenshots are only allowed for a while after you click the toolbar button (Chrome's rule); if one is refused, click the button again.
 - **Keyboard first.** **Ctrl+K** opens a command palette: type to run any action, jump to a section, or find a comment. Press **?** in the viewer for every shortcut.
 - **Accessible.** Every control has a label, menus and dialogs work with the keyboard, and colours meet WCAG AA contrast in light and dark themes (checked automatically with axe on every test run).
 
@@ -82,7 +83,7 @@ In plain terms: Review Pen treats every document as untrusted, keeps everything 
 - **Minimal permissions.**
   - `storage` and `unlimitedStorage` keep your reviews in this browser (IndexedDB), so long documents don't hit a quota.
   - `scripting` is used to register the small script that hands raw `.md` pages on the sites *you* allowed to the viewer, and, as a last resort when a Google export can't be read directly, to fetch that export from inside the open Google tab.
-  - `activeTab` lets Review Pen read the address of the current tab only when you click its toolbar button, to open that Google file or `.md` page. It shows no install warning and gives no access to other tabs.
+  - `activeTab` lets Review Pen act on the current tab only when you click its toolbar button: read its address (to open that Google file or `.md` page), show the comment layer on a Google page, and take screenshots of that tab for your pins and boxes. It shows no install warning and gives no access to other tabs. Screenshots are taken only while that Google tab is the one showing, and stay in this browser.
   - Site access is *optional*: the three code-hosting sites above (only after **Allow these sites**) and `docs.google.com` / `googleusercontent.com` (only when you open a Google file and click **Allow and open**).
 - **Opening a review file is safe.** A `.review.json` file from someone else is checked field by field against a strict shape before anything uses it; unknown fields are dropped and nothing in it is ever run.
 - **Writing files only when you ask.** Review Pen writes to a file only when you click **Apply exact-text changes ▸ Write**, and Chrome asks you to allow it first. Watching a file only reads it.
@@ -114,7 +115,8 @@ Golden files for the prompt formats live in `tests/golden/`. If you change the p
 | `src/core/compile` | The deterministic prompt compiler, its presets, a small safe template engine and token counting. |
 | `src/core/preflight.ts` | Checks run before you copy a prompt. |
 | `src/ui` | The viewer, welcome page, components and styles (React). |
-| `src/entrypoints` | Extension entry points: background worker, `.md` page hand-off script, viewer and welcome pages. |
+| `src/entrypoints` | Extension entry points: background worker, `.md` page hand-off script, the Google page layer, viewer and welcome pages. |
+| `src/core/google` | Google links and exports, and the page layer's checked messages and page reading (all Google page specifics are in `page-adapters.ts`). |
 | `tests/unit`, `tests/e2e` | Unit tests with fixtures and golden files; browser tests that load the built extension. |
 
 Built with [WXT](https://wxt.dev), React, TypeScript, unified/remark/rehype, Shiki, KaTeX, Mermaid, Dexie and js-tiktoken.
@@ -123,7 +125,7 @@ Built with [WXT](https://wxt.dev), React, TypeScript, unified/remark/rehype, Shi
 
 1. **Markdown reviewer** (done): viewer, anchoring, comments, prompt compiler, local storage.
 2. **Review loop and exports** (done): fuzzy re-anchoring, review rounds with a scope guard, the AI's checklist reply, exact text without AI, annotated PDF, review files, live file watching. Voice comments are left out on purpose: Chrome's built-in speech recognition sends audio to Google's servers, which breaks the promise that nothing leaves your browser.
-3. **Google Workspace** (done, as an import): Docs, Sheets and Slides open as a reviewable copy through Google's own export and your existing sign-in. Not done, on purpose: drawing comments directly on the Google page. Docs and Slides draw their content on a canvas, so it would mean reading Google's private, changing page internals, which breaks often and needs broad access to your Google pages.
+3. **Google Workspace** (done): Docs, Sheets and Slides open as a reviewable copy through Google's own export and your existing sign-in, and pins and boxes with screenshots can be placed on the Google page itself (shown only after a toolbar click, with no standing access to Google pages). Review Pen still does not read or change the Google document's content on the page; Docs and Slides draw it on a canvas.
 4. **Polish and release** (done, apart from translation): accessibility checks, command palette, [privacy policy](PRIVACY.md), [store listing draft](docs/STORE_LISTING.md), third-party notices, CI. Not done yet: a Hebrew (and other languages) interface. Documents in any language already work; the buttons and menus are English only.
 
 ## Open-source software

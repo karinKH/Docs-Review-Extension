@@ -15,7 +15,7 @@ export interface ApplyPlan {
 }
 
 export function replaceable(session: Session): Annotation[] {
-  return session.annotations.filter((a) => a.mode === 'replace' && (a.status === 'open' || a.status === 'retry'));
+  return session.annotations.filter((a) => !a.visual && a.mode === 'replace' && (a.status === 'open' || a.status === 'retry'));
 }
 
 export function planReplacements(session: Session, ids?: string[]): ApplyPlan {
