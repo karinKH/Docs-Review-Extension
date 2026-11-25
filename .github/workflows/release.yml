@@ -1,43 +1,58 @@
-# Publishes a ready-to-install download when a version tag (v1.2.3) is pushed.
-# It builds and tests exactly that commit, then attaches review-pen-chrome.zip
-# to a GitHub Release, so people can install without any developer tools.
+# Publishes a ready-to-install download whenever main has a version that has
+# no release yet. Raise "version" in package.json, merge, and this builds and
+# tests that commit, then creates the release v<version> with
+# review-pen-chrome.zip attached, so people can install without developer tools.
 # Uses only the repository's built-in token; no other secrets.
 name: Release
 
 on:
   push:
-    tags: ['v*']
+    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
   release:
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Is this version already released?
+        id: check
+        run: |
+          v="v$(node -p "require('./package.json').version")"
+          echo "tag=$v" >> "$GITHUB_OUTPUT"
+          if gh release view "$v" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $v exists; nothing to do."
+            echo "new=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "new=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.check.outputs.new == 'true'
+        uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
-      - name: Tag must match package.json version
+      - if: steps.check.outputs.new == 'true'
+        run: npm ci
+      - if: steps.check.outputs.new == 'true'
+        run: npm run typecheck && npm test && npm run build && npm run build:e2e
+      - if: steps.check.outputs.new == 'true'
+        run: npx playwright install --with-deps chromium && npx playwright test
+      - if: steps.check.outputs.new == 'true'
+        name: Create the release with the download
         run: |
-          v="v$(node -p "require('./package.json').version")"
-          if [ "$v" != "$GITHUB_REF_NAME" ]; then echo "Tag $GITHUB_REF_NAME does not match package.json ($v)"; exit 1; fi
-      - run: npm run typecheck
-      - run: npm test
-      - run: npm run build
-      - run: npm run build:e2e
-      - run: npx playwright install --with-deps chromium
-      - run: npx playwright test
-      - run: npm run zip
-      - name: Create the release with the download
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
+          npm run zip
           cp .output/review-pen-*-chrome.zip review-pen-chrome.zip
-          gh release create "$GITHUB_REF_NAME" review-pen-chrome.zip \
-            --title "Review Pen $GITHUB_REF_NAME" \
-            --notes "Download **review-pen-chrome.zip** below, unzip it, and load the folder in chrome://extensions with Developer mode on and **Load unpacked**. Step-by-step: see the README."
+          gh release create "${{ steps.check.outputs.tag }}" review-pen-chrome.zip \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "Review Pen ${{ steps.check.outputs.tag }}" \
+            --notes "Download **review-pen-chrome.zip** below, unzip it, and load the folder in chrome://extensions with Developer mode on and **Load unpacked**. Step-by-step instructions are at the top of the README."

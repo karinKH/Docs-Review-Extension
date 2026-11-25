@@ -96,7 +96,7 @@ Found a security problem? Please report it privately through this repository's *
 
 ## Development
 
-To build it yourself instead of downloading: install [Node.js](https://nodejs.org/) 22 or newer, run `npm install` and `npm run build`, then load the `.output/chrome-mv3` folder with **Load unpacked** as above. To publish a new downloadable version, raise `version` in `package.json`, merge, and push a tag such as `v0.2.0`: the Release workflow builds, tests and attaches `review-pen-chrome.zip`.
+To build it yourself instead of downloading: install [Node.js](https://nodejs.org/) 22 or newer, run `npm install` and `npm run build`, then load the `.output/chrome-mv3` folder with **Load unpacked** as above. To publish a new downloadable version, raise `version` in `package.json` and merge to `main`: the Release workflow builds and tests it, then creates the release `v<version>` with `review-pen-chrome.zip` attached.
 
 ```sh
 npm install          # also generates WXT types
