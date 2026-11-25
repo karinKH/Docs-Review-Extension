@@ -1029,7 +1029,7 @@ export function Viewer({ source, identity, onReload, onNewSource, onWriteFile, w
               <IconPlus size={14} />
             </button>
           ) : null}
-          <div className="badges" aria-label="Comment markers">
+          <div className="badges" role="group" aria-label="Comment markers">
             {badges.map((b) => (
               <button
                 key={b.id}
