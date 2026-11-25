@@ -3,7 +3,8 @@ import { INTENT_LABELS, PRIORITY_LABELS, type Annotation, type Priority, type Se
 import { compile, DEFAULT_CUSTOM_TEMPLATE, PRESET_LABELS, type CompileOptions, type CompileResult, type PresetId } from '../../core/compile/compile';
 import { countOpenAITokens } from '../../core/compile/tokens';
 import { preflight, type PreflightIssue } from '../../core/preflight';
-import { inDocumentOrder } from '../../core/session';
+import { inDocumentOrder, visualLocation } from '../../core/session';
+import { googleUrlForKey } from '../../core/google/urls';
 import { isAnchored } from '../../core/anchor/relocate';
 import { TemplateError } from '../../core/compile/template';
 import { locationLabel } from './CommentPopover';
@@ -44,6 +45,8 @@ interface Props {
   onJumpNumber: (n: number) => void;
   onSavePrompt: (text: string) => void;
   rounds: RoundsProps;
+  /** Screenshots of comments placed on the Google page (blob: addresses by image id). */
+  images: Map<string, string>;
 }
 
 type Filter = 'all' | 'open' | 'must';
@@ -67,7 +70,7 @@ function CommentsTab(p: Props) {
     if (filter === 'open') l = l.filter((a) => a.status !== 'resolved' && a.status !== 'wontfix');
     if (filter === 'must') l = l.filter((a) => a.priority === 'must');
     const needle = q.trim().toLowerCase();
-    if (needle) l = l.filter((a) => `${a.body} ${a.replacement} ${a.anchor.exact} #${a.number}`.toLowerCase().includes(needle));
+    if (needle) l = l.filter((a) => `${a.body} ${a.replacement} ${a.anchor.exact} ${a.visual ? visualLocation(a.visual) : ''} #${a.number}`.toLowerCase().includes(needle));
     return l;
   }, [p.session.annotations, filter, q]);
 
@@ -102,7 +105,9 @@ function CommentsTab(p: Props) {
       ) : (
         <ol className="cards">
           {list.map((a) => {
-            const lost = !isAnchored(p.session.source, a) && !a.match;
+            const lost = !a.visual && !isAnchored(p.session.source, a) && !a.match;
+            const shot = a.visual?.imageId ? p.images.get(a.visual.imageId) : undefined;
+            const googleUrl = a.visual ? googleUrlForKey(p.session.docKey, a.visual) : null;
             return (
               <li key={a.id} className={`card${p.activeId === a.id ? ' active' : ''}${a.status === 'resolved' ? ' resolved' : ''}`}>
                 <div
@@ -121,16 +126,26 @@ function CommentsTab(p: Props) {
                     <span className={`prio p-${a.priority}`}>{PRIORITY_LABELS[a.priority]}</span>
                     {a.status === 'resolved' ? <span className="pill ok">Resolved</span> : null}
                     {lost ? <span className="pill warn" title="The quoted text is not in this version of the file">Not found</span> : null}
+                    {a.visual ? <span className="pill info" title="Placed on the Google page with a pin or box">On the Google page</span> : null}
                     <MatchPill a={a} />
                   </div>
-                  <div className="card-quote" dir="auto">{a.anchor.exact.length > 160 ? `${a.anchor.exact.slice(0, 160)}…` : a.anchor.exact}</div>
+                  {a.visual ? (
+                    shot ? <img className="card-shot" src={shot} alt={`Screenshot for comment ${a.number}`} /> : null
+                  ) : (
+                    <div className="card-quote" dir="auto">{a.anchor.exact.length > 160 ? `${a.anchor.exact.slice(0, 160)}…` : a.anchor.exact}</div>
+                  )}
                   {a.mode === 'replace' ? (
                     <div className="card-body mono" dir="auto">→ {a.replacement || <em>(delete)</em>}</div>
                   ) : null}
                   {a.body.trim() ? <div className="card-body" dir="auto">{a.body}</div> : null}
                   {a.aiReply ? <div className="card-ai" dir="auto"><span className="muted">AI:</span> {a.aiReply}</div> : null}
-                  <div className="card-loc" dir="auto">{locationLabel(a.anchor)}</div>
+                  <div className="card-loc" dir="auto">{a.visual ? visualLocation(a.visual) : locationLabel(a.anchor)}</div>
                 </div>
+                {googleUrl ? (
+                  <a className="card-google" href={googleUrl} target="_blank" rel="noopener noreferrer">
+                    Show on the Google page
+                  </a>
+                ) : null}
                 {a.match?.state === 'uncertain' ? (
                   <div className="confirm-row">
                     <span className="muted small">Is this the right place?</span>

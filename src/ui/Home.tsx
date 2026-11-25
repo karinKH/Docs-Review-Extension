@@ -28,7 +28,7 @@ function GoogleLinkForm() {
         <input id="rp-google" className="input input-sm" type="url" placeholder="https://docs.google.com/document/d/…" value={link} onChange={(e) => { setLink(e.target.value); setError(null); }} />
         <button type="submit" className="btn btn-sm">Open</button>
       </div>
-      <p className="muted small">Or click the Review Pen button in Chrome's toolbar while the file is open.</p>
+      <p className="muted small">Or, with the file open in Google, click the Review Pen button in Chrome's toolbar: it adds Pin and Box to that page for design comments, and <strong>Open review</strong> opens this copy.</p>
       {error ? <p className="error-text small" role="alert">{error}</p> : null}
     </form>
   );
@@ -267,10 +267,6 @@ export function Home() {
         <span>Private by design: no AI calls, no servers, no analytics. Reviews stay on this device.</span>
         <span className="home-links">
           <a href="https://github.com/karinKH/Docs-Review-Extension/blob/main/PRIVACY.md" target="_blank" rel="noopener noreferrer">Privacy policy</a>
-          {' · '}
-          <a href={browser.runtime.getURL('/third-party-notices.txt')} target="_blank" rel="noopener">Open-source licenses</a>
-          {' · '}
-          <a href="https://github.com/karinKH/Docs-Review-Extension" target="_blank" rel="noopener noreferrer">Source code</a>
         </span>
       </footer>
     </div>

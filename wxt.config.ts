@@ -8,7 +8,22 @@ import { defineConfig } from 'wxt';
 export default defineConfig({
   srcDir: 'src',
   modules: ['@wxt-dev/module-react'],
-  manifest: {
+  hooks: {
+    // The Google page layer is added only on a toolbar click (activeTab), so it
+    // needs no standing access to docs.google.com. WXT adds a content script's
+    // address to host_permissions by default; take it out again, so installing
+    // Review Pen grants no access to any website.
+    'build:manifestGenerated': (_wxt, manifest) => {
+      const hosts = (manifest.host_permissions ?? []).filter((h: string) => h !== 'https://docs.google.com/*');
+      if (hosts.length) manifest.host_permissions = hosts;
+      else delete manifest.host_permissions;
+    },
+  },
+  manifest: ({ mode }) => ({
+    // Browser-test build only (npm run build:e2e, separate output folder):
+    // headless Chrome can't click the toolbar button, which is what grants
+    // Review Pen access to a tab in the real extension. Never shipped.
+    ...(mode === 'e2e' ? { host_permissions: ['<all_urls>'] } : {}),
     name: 'Review Pen',
     description:
       'Annotate long documents and turn your comments into precise, copy-ready revision prompts for AI tools. Local-first, no AI calls.',
@@ -29,5 +44,5 @@ export default defineConfig({
       extension_pages: "script-src 'self'; object-src 'self'; base-uri 'none'; form-action 'none'",
     },
     minimum_chrome_version: '114',
-  },
+  }),
 });

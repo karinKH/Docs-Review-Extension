@@ -14,9 +14,12 @@ import { buildPrintRoot } from './lib/print';
 import { fingerprint } from '../core/text/hash';
 import {
   addAnnotation,
+  adoptFirstSource,
   createSession,
   deleteAnnotation,
   inDocumentOrder,
+  mergeVisual,
+  screenshotName,
   setDirectives,
   setFilePath,
   setStatus,
@@ -26,7 +29,9 @@ import {
 import { compile } from '../core/compile/compile';
 import type { Annotation, Anchor, Session } from '../core/types';
 import type { DocIdentity } from '../core/doc-key';
-import { loadSession, saveSession } from './lib/db';
+import { getImage, loadSession, saveSessionMerging } from './lib/db';
+import { browser } from 'wxt/browser';
+import { zipSync } from 'fflate';
 import { applyTheme, isDark, useSettings } from './lib/settings';
 import { Header } from './components/Header';
 import { Toc } from './components/Toc';
@@ -109,6 +114,8 @@ export function Viewer({ source, identity, onReload, onNewSource, onWriteFile, w
   const pendingScroll = useRef<number | null>(null);
   const wheelAt = useRef(0);
   const sessionRef = useRef<Session | null>(null);
+  /** Ids of pins and boxes this review has seen, so saving never drops one just placed on the Google page. */
+  const seenVisual = useRef<Set<string>>(new Set());
   /** Comment numbers applied by "Apply exact-text changes": resolved once the new version arrives. */
   const pendingResolve = useRef<number[] | null>(null);
 
@@ -131,8 +138,12 @@ export function Viewer({ source, identity, onReload, onNewSource, onWriteFile, w
       const inMemory = sessionRef.current;
       const saved = inMemory ?? (await loadSession(identity.docKey));
       let s: Session;
+      const adopted = saved ? adoptFirstSource(saved, source) : null;
       if (!saved) {
         s = createSession({ docKey: identity.docKey, title: identity.title, filePath: identity.filePath, source });
+      } else if (adopted) {
+        // Started with pins on the Google page; this text copy is its first version.
+        s = { ...adopted, title: identity.title, filePath: saved.filePath || identity.filePath };
       } else if (saved.sourceFingerprint !== fingerprint(source)) {
         const { session: next, report } = startRound(saved, source, docCtx);
         s = { ...next, title: identity.title };
@@ -155,14 +166,61 @@ export function Viewer({ source, identity, onReload, onNewSource, onWriteFile, w
 
   const session = hist?.session ?? null;
   sessionRef.current = session;
+  if (session) for (const a of session.annotations) if (a.visual) seenVisual.current.add(a.id);
 
   useEffect(() => {
     if (!session) return;
     const worth = session.annotations.length > 0 || session.directives.length > 0 || session.reviewed.length > 0;
     if (!worth) return;
-    const t = setTimeout(() => void saveSession(session), 250);
+    const t = setTimeout(() => {
+      void saveSessionMerging(session, seenVisual.current).then((merged) => {
+        // A pin was placed on the Google page meanwhile: show it here too.
+        if (merged !== session) setHist((h) => (h && h.session === session ? { ...h, session: merged } : h));
+      });
+    }, 250);
     return () => clearTimeout(t);
   }, [session]);
+
+  // Pins and boxes added, edited or deleted on the Google page while this review is open.
+  useEffect(() => {
+    const onMsg = (msg: unknown) => {
+      const m = msg as { type?: string; docKey?: string };
+      if (m?.type !== 'rp-session-changed' || m.docKey !== identity.docKey) return;
+      void loadSession(identity.docKey).then((stored) => {
+        if (!stored) return;
+        setHist((h) => (h ? { ...h, session: mergeVisual(h.session, stored, seenVisual.current, 'sync') } : h));
+      });
+    };
+    browser.runtime.onMessage.addListener(onMsg);
+    return () => browser.runtime.onMessage.removeListener(onMsg);
+  }, [identity.docKey]);
+
+  // Screenshots of pins and boxes, read from this browser's storage.
+  const [images, setImages] = useState<Map<string, string>>(() => new Map());
+  const imageKey = useMemo(
+    () => (session ? session.annotations.map((a) => a.visual?.imageId).filter((x): x is string => !!x).sort().join(',') : ''),
+    [session],
+  );
+  useEffect(() => {
+    const ids = imageKey ? imageKey.split(',') : [];
+    let alive = true;
+    const urls: string[] = [];
+    void Promise.all(ids.map(async (id) => [id, await getImage(id)] as const)).then((rows) => {
+      if (!alive) return;
+      const map = new Map<string, string>();
+      for (const [id, rec] of rows) {
+        if (!rec) continue;
+        const url = URL.createObjectURL(rec.blob);
+        urls.push(url);
+        map.set(id, url);
+      }
+      setImages(map);
+    });
+    return () => {
+      alive = false;
+      urls.forEach((u) => URL.revokeObjectURL(u));
+    };
+  }, [imageKey]);
 
   const commit = useCallback((fn: (s: Session) => Session) => {
     setHist((h) => (h ? { session: fn(h.session), past: [...h.past.slice(-99), h.session], future: [] } : h));
@@ -392,7 +450,8 @@ export function Viewer({ source, identity, onReload, onNewSource, onWriteFile, w
       if (!composer) return;
       if (composer.editId) {
         const id = composer.editId;
-        commit((s) => updateAnnotation(s, id, d));
+        // A pin or box has no text to replace, so it stays an instruction.
+        commit((s) => updateAnnotation(s, id, s.annotations.find((a) => a.id === id)?.visual ? { ...d, mode: 'instruction', replacement: '' } : d));
       } else {
         let createdId = '';
         commit((s) => {
@@ -540,7 +599,8 @@ export function Viewer({ source, identity, onReload, onNewSource, onWriteFile, w
       setToast(`This review is split into ${r.parts.length} parts. Copy them one at a time from the Prompt tab.`);
       return;
     }
-    void copyText(r.parts[0]!.text, `${r.itemCount} comment${r.itemCount === 1 ? '' : 's'}`);
+    const shots = session.annotations.filter((a) => a.visual?.imageId && options.statuses.includes(a.status)).length;
+    void copyText(r.parts[0]!.text, `${r.itemCount} comment${r.itemCount === 1 ? '' : 's'}${shots ? ` · attach the ${shots} screenshot${shots === 1 ? '' : 's'} (menu ▸ Download screenshots)` : ''}`);
   }, [session, options, copyText, updateSettings]);
 
   // ---------- review rounds, exports ----------
@@ -569,7 +629,8 @@ export function Viewer({ source, identity, onReload, onNewSource, onWriteFile, w
     const index = getIndex();
     const docEl = docRef.current;
     if (!session || !index || !docEl) return;
-    const root = buildPrintRoot({ docEl, index, session, annotations: visible, title: identity.title, filePath: session.filePath || identity.filePath, now: new Date() });
+    const onPage = inDocumentOrder(session.annotations).filter((a) => a.visual && a.status !== 'resolved' && a.status !== 'wontfix');
+    const root = buildPrintRoot({ docEl, index, session, annotations: [...visible, ...onPage], title: identity.title, filePath: session.filePath || identity.filePath, now: new Date(), images });
     document.getElementById('print-root')?.remove();
     document.body.append(root);
     const title = document.title;
@@ -581,8 +642,25 @@ export function Viewer({ source, identity, onReload, onNewSource, onWriteFile, w
       window.removeEventListener('afterprint', cleanup);
     };
     window.addEventListener('afterprint', cleanup);
-    setTimeout(() => window.print(), 60);
-  }, [getIndex, session, visible, identity.title, identity.filePath]);
+    // Screenshots must be decoded before the print copy is captured.
+    void Promise.all([...root.querySelectorAll('img')].map((img) => img.decode().catch(() => undefined))).then(() => setTimeout(() => window.print(), 60));
+  }, [getIndex, session, visible, identity.title, identity.filePath, images]);
+
+  const shotCount = useMemo(() => (session ? session.annotations.filter((a) => a.visual?.imageId && images.has(a.visual.imageId)).length : 0), [session, images]);
+  const downloadScreenshots = useCallback(async () => {
+    if (!session) return;
+    const files: Record<string, Uint8Array> = {};
+    for (const a of session.annotations) {
+      const rec = a.visual?.imageId ? await getImage(a.visual.imageId) : undefined;
+      if (rec) files[screenshotName(a.number)] = new Uint8Array(await rec.blob.arrayBuffer());
+    }
+    const names = Object.keys(files);
+    if (!names.length) return;
+    const zip = zipSync(files, { level: 0 });
+    const base = identity.title.replace(/\.[^.]+$/, '');
+    download(`${base} - screenshots.zip`, new Blob([zip as Uint8Array<ArrayBuffer>], { type: 'application/zip' }), 'application/zip');
+    setToast(`${names.length} screenshot${names.length === 1 ? '' : 's'} saved. Their names match the prompt.`);
+  }, [session, identity.title]);
 
   const saveReviewFile = useCallback(async () => {
     if (!session) return;
@@ -665,12 +743,13 @@ export function Viewer({ source, identity, onReload, onNewSource, onWriteFile, w
       { label: 'Save review file…', onSelect: () => void saveReviewFile() },
       { label: 'Open review file…', onSelect: () => void openReviewFile() },
       { label: 'Export comments (W3C Web Annotations)', onSelect: exportWebAnnotations },
+      { label: `Download screenshots (${shotCount})`, onSelect: () => void downloadScreenshots(), disabled: shotCount === 0 },
       { label: "Paste the AI's checklist reply…", onSelect: () => setDialog('paste-reply'), separator: true },
       { label: 'Paste a revised version…', onSelect: () => setDialog('paste-version'), disabled: !onNewSource },
       { label: `Apply exact-text changes (${exactCount})…`, onSelect: () => setDialog('apply'), disabled: exactCount === 0 || !onNewSource },
       { label: 'Review rounds and changes', onSelect: () => openPanelTab('rounds') },
     ],
-    [printPdf, savePrompt, saveReviewFile, openReviewFile, exportWebAnnotations, exactCount, onNewSource, openPanelTab],
+    [printPdf, savePrompt, saveReviewFile, openReviewFile, exportWebAnnotations, exactCount, onNewSource, openPanelTab, shotCount, downloadScreenshots],
   );
 
   const commands: Command[] = useMemo(() => {
@@ -889,6 +968,7 @@ export function Viewer({ source, identity, onReload, onNewSource, onWriteFile, w
         onShortcuts={() => setDialog('shortcuts')}
         onSettings={() => setDialog('settings')}
         onCopy={copyPrompt}
+        onPdf={printPdf}
         onReload={onReload}
         openCount={openCount}
         menu={menu}
@@ -922,6 +1002,13 @@ export function Viewer({ source, identity, onReload, onNewSource, onWriteFile, w
           </div>
         ) : null}
         <div className="doc-wrap" ref={wrapRef} onMouseMove={onDocMouseMove}>
+          {source === '' && identity.docKey.startsWith('google:') ? (
+            <div className="empty-doc" role="note">
+              <p className="empty-title">Only comments from the Google page</p>
+              <p className="muted">These were placed on the Google page with pins and boxes. To comment on the text too, open the text copy.</p>
+              <a className="btn btn-sm" href={`?${(() => { const q = new URLSearchParams(location.search); q.delete('pageonly'); return q; })()}`}>Open the text copy</a>
+            </div>
+          ) : null}
           <div ref={docRef} className={view === 'rendered' ? 'md' : 'raw-wrap'} onClick={onDocClick}>
             {view === 'rendered' ? (
               <MarkdownView hast={rendered.hast} dark={dark} allowRemoteImages={allowImages} onLoadImages={allowImagesNow} onContentChange={bump} />
@@ -942,7 +1029,7 @@ export function Viewer({ source, identity, onReload, onNewSource, onWriteFile, w
               <IconPlus size={14} />
             </button>
           ) : null}
-          <div className="badges" aria-label="Comment markers">
+          <div className="badges" role="group" aria-label="Comment markers">
             {badges.map((b) => (
               <button
                 key={b.id}
@@ -983,6 +1070,7 @@ export function Viewer({ source, identity, onReload, onNewSource, onWriteFile, w
           onFilePath={(p) => commit((s) => setFilePath(s, p))}
           onCopy={(text, info) => void copyText(text, info)}
           onSavePrompt={(t) => void savePrompt(t)}
+          images={images}
           rounds={{
             watching,
             canReload: !!onReload,

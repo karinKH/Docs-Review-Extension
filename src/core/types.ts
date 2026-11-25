@@ -11,6 +11,7 @@ export const INTENTS = [
   'fact-check',
   'format',
   'question',
+  'design',
 ] as const;
 export type Intent = (typeof INTENTS)[number];
 
@@ -23,6 +24,7 @@ export const INTENT_LABELS: Record<Intent, string> = {
   'fact-check': 'Fact-check',
   format: 'Format/Style',
   question: 'Question - do not edit',
+  design: 'Design/Layout',
 };
 
 export const PRIORITIES = ['must', 'suggestion', 'nit'] as const;
@@ -98,6 +100,11 @@ export interface Annotation {
   match?: MatchInfo;
   /** What the AI said about this item ("done", "skipped: …", an answer), pasted back by the reviewer. */
   aiReply?: string;
+  /**
+   * A comment placed on the original Google page (a pin or a box), not on
+   * text. Its `anchor` is a placeholder; this says where it is.
+   */
+  visual?: VisualAnchor;
   createdAt: number;
   updatedAt: number;
 }
@@ -149,6 +156,28 @@ export interface RoundHunk {
 export const MAX_ROUND_HUNKS = 2000;
 
 export const MAX_ROUNDS = 20;
+
+/** Where a pin or box sits on a Google Docs page, Slides slide or Sheets tab. */
+export interface VisualAnchor {
+  app: 'doc' | 'sheet' | 'slides';
+  /** What the box is measured against. "viewport" means no slide or page was recognised. */
+  relativeTo: 'slide' | 'page' | 'viewport';
+  /** Fractions (0 to 1) of the slide, page or visible area. A pin has w = h = 0. */
+  box: { x: number; y: number; w: number; h: number };
+  /** Slides: Google's id for the slide (from the address, #slide=id.…), and its position in the deck. */
+  slideId?: string | null;
+  slideNumber?: number | null;
+  /** Docs: 1-based page number. */
+  page?: number | null;
+  /** Sheets: the tab and the selected cell or range ("B7", "B7:D9"). */
+  sheetGid?: string | null;
+  sheetName?: string | null;
+  cell?: string | null;
+  /** Text Google showed for the selected cell, when available. */
+  nearText?: string | null;
+  /** Id of the screenshot in this browser's storage, if one was taken. */
+  imageId?: string | null;
+}
 
 export interface Session {
   schema: 'review-pen/session@2';

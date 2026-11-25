@@ -5,13 +5,13 @@
 
 import { browser } from 'wxt/browser';
 import { identityFromPickedFile, identityFromUrl, type DocIdentity } from '../../core/doc-key';
-import { getHandle } from './db';
+import { getHandle, loadSession } from './db';
 import { handoffKey, uploadKey, type Handoff, type Upload } from '../../core/handoff';
-import { isGoogleUrl } from '../../core/google/urls';
+import { googleDocKey, isGoogleUrl, KIND_TITLES, parseGoogleUrl, titleFromTab } from '../../core/google/urls';
 import { loadGoogle } from './google';
 
 export type LoadResult =
-  | { kind: 'ok'; source: string; identity: DocIdentity; origin: 'handoff' | 'fetch' | 'file' | 'demo'; reloadable: boolean }
+  | { kind: 'ok'; source: string; identity: DocIdentity; origin: 'handoff' | 'fetch' | 'file' | 'demo' | 'page'; reloadable: boolean }
   | { kind: 'needs-file-permission'; handleId: string; name: string }
   | { kind: 'needs-host-permission'; url: string; origin: string }
   | { kind: 'needs-google-permission'; url: string; label: string }
@@ -40,6 +40,7 @@ export async function loadFromParams(params: URLSearchParams): Promise<LoadResul
     return { kind: 'ok', source: up.text, identity: { docKey: `upload:${up.name}`, title: up.name, filePath: up.name }, origin: 'handoff', reloadable: false };
   }
   if (!src) return { kind: 'home' };
+  if (isGoogleUrl(src) && params.get('pageonly')) return loadPageOnly(src, params.get('title'));
   if (isGoogleUrl(src)) {
     const tab = Number(params.get('tab'));
     return loadGoogle(src, params.get('title'), Number.isInteger(tab) && tab > 0 ? tab : null);
@@ -63,6 +64,18 @@ export async function loadFromParams(params: URLSearchParams): Promise<LoadResul
   const granted = await browser.permissions.contains({ origins: [origin] }).catch(() => false);
   if (!granted) return { kind: 'needs-host-permission', url: src, origin };
   return fetchText(src, identity);
+}
+
+/**
+ * Only the comments placed on the Google page, without downloading a text copy
+ * (nothing is fetched). Shows the text copy too if one was opened before.
+ */
+async function loadPageOnly(src: string, tabTitle: string | null): Promise<LoadResult> {
+  const ref = parseGoogleUrl(src)!;
+  const docKey = googleDocKey(ref);
+  const saved = await loadSession(docKey);
+  const title = saved?.title || titleFromTab(tabTitle) || KIND_TITLES[ref.kind];
+  return { kind: 'ok', source: saved?.source ?? '', identity: { docKey, title, filePath: saved?.filePath || title }, origin: 'page', reloadable: false };
 }
 
 async function fetchText(url: string, identity: DocIdentity): Promise<LoadResult> {

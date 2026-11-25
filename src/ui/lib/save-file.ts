@@ -13,8 +13,8 @@ export function safeFileName(name: string): string {
   return (cleaned || 'review').slice(0, 120);
 }
 
-export function download(name: string, text: string, mime = 'text/plain'): void {
-  const url = URL.createObjectURL(new Blob([text], { type: `${mime};charset=utf-8` }));
+export function download(name: string, content: string | Blob, mime = 'text/plain'): void {
+  const url = URL.createObjectURL(typeof content === 'string' ? new Blob([content], { type: `${mime};charset=utf-8` }) : content);
   const a = document.createElement('a');
   a.href = url;
   a.download = safeFileName(name);

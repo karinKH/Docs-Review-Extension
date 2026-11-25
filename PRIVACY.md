@@ -18,6 +18,7 @@ Nothing, unless you ask it to open something from the web. In that case the only
 
 - **Raw Markdown links** on raw.githubusercontent.com, gist.githubusercontent.com or gitlab.com, after you allow those sites: Review Pen downloads the file you opened.
 - **Google Docs, Sheets and Slides**, after you allow docs.google.com and googleusercontent.com: Review Pen downloads Google's export of the one file you opened, using the Google sign-in already in your browser. It does not use the Google API, asks for no Google account access, and receives no password or token.
+- **Comments on a Google page** (pins and boxes) send nothing anywhere. Their screenshots are taken by Chrome on your computer and saved in Review Pen's storage in this browser.
 - **Images inside a document** load only after you click "Show images", because loading an image tells its server that the document was opened.
 
 These requests go straight from your browser to the site that holds the file. Review Pen has no server of its own.
@@ -27,7 +28,7 @@ These requests go straight from your browser to the site that holds the file. Re
 - It never calls an AI service or any other remote service. Prompts are built on your computer; you copy them yourself.
 - It has no analytics, tracking, advertising, or crash reporting.
 - It does not sell, share, or transfer any data, and it does not use data for any purpose other than the features you use.
-- It does not read pages you visit, except: a `.md` page you open on a site you allowed (to show it in Review Pen), and the address of the current tab when you click the Review Pen toolbar button.
+- It does not read pages you visit, except: a `.md` page you open on a site you allowed (to show it in Review Pen), and, when you click the Review Pen toolbar button, the current tab's address. On a Google Docs, Sheets or Slides tab, that click also shows Review Pen's comment layer, which reads where you are (the slide, the page number, the sheet tab and selected cell and the text Google shows for that cell) and takes screenshots of the area you mark. It does not read or change the document's content.
 
 ## Permissions and why they are needed
 
@@ -35,7 +36,7 @@ These requests go straight from your browser to the site that holds the file. Re
 | --- | --- |
 | `storage`, `unlimitedStorage` | Keep your reviews and settings on your computer; long documents would otherwise hit a size limit. |
 | `scripting` | Hand raw `.md` pages on sites you allowed to the viewer; as a fallback, read a Google export from inside the Google tab you opened. |
-| `activeTab` | When you click the toolbar button, read the current tab's address to open that Google file or `.md` page. |
+| `activeTab` | When you click the toolbar button: read the current tab's address to open that Google file or `.md` page; show the comment layer on a Google page; screenshot that tab for your pins and boxes (only while it is the tab showing). |
 | Optional: raw.githubusercontent.com, gist.githubusercontent.com, gitlab.com | Open raw Markdown links there. Asked only when you click "Allow these sites". |
 | Optional: docs.google.com, googleusercontent.com | Download the export of a Google file you open. Asked only when you click "Allow and open". |
 | File URLs (a switch you turn on in Chrome) | Show `.md` files you open from your disk. |

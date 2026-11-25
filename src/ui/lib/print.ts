@@ -9,6 +9,7 @@
 
 import type { SourceDomIndex } from '../../core/markdown/dom-map';
 import { INTENT_LABELS, PRIORITY_LABELS, type Annotation, type Session } from '../../core/types';
+import { ON_PAGE_SECTION, visualLocation } from '../../core/session';
 
 const BLOCK_SELECTOR = 'p, li, h1, h2, h3, h4, h5, h6, pre, blockquote, table, .math-wrap, .callout, .mermaid-block, .raw-line, dd, dt';
 
@@ -20,6 +21,8 @@ export interface PrintInput {
   title: string;
   filePath: string;
   now: Date;
+  /** Screenshot addresses (blob: URLs) for comments placed on the Google page, by image id. */
+  images?: Map<string, string>;
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string): HTMLElementTagNameMap[K] {
@@ -41,6 +44,7 @@ function label(a: Annotation): string {
 }
 
 function locationOf(a: Annotation): string {
+  if (a.visual) return visualLocation(a.visual);
   const lines = a.anchor.startLine === a.anchor.endLine ? `Line ${a.anchor.startLine}` : `Lines ${a.anchor.startLine}–${a.anchor.endLine}`;
   const path = a.anchor.headingPath[a.anchor.headingPath.length - 1];
   return path ? `${lines} · ${path}` : lines;
@@ -144,6 +148,7 @@ export function buildPrintRoot(input: PrintInput): HTMLElement {
   const segs = new Map<number, Seg[]>();
   const lastSeg = new Map<string, { node: number; e: number }>();
   for (const a of annotations) {
+    if (a.visual) continue;
     // Whole-section comments mark only the heading line; the callout says it covers the section.
     let end = a.anchor.end;
     if (a.anchor.scope === 'section' || a.anchor.scope === 'document') {
@@ -230,7 +235,8 @@ export function buildPrintRoot(input: PrintInput): HTMLElement {
   }
 
   // Comments whose text could not be marked (for example inside a diagram) still get listed.
-  const unplaced = annotations.filter((a) => !blockOf.has(a.id));
+  const unplaced = annotations.filter((a) => !a.visual && !blockOf.has(a.id));
+  const onPage = annotations.filter((a) => a.visual);
   const root = el('div');
   root.id = 'print-root';
   root.append(cover(input));
@@ -241,6 +247,27 @@ export function buildPrintRoot(input: PrintInput): HTMLElement {
     extra.append(el('h2', 'pcover-h', 'Comments on parts that cannot be marked in print'));
     for (const a of unplaced) extra.append(calloutFor(a));
     body.append(extra);
+  }
+  // Pins and boxes from the Google page, each with its screenshot when there is one.
+  if (onPage.length) {
+    const sec = el('section', 'ponpage');
+    sec.append(el('h2', 'pcover-h', ON_PAGE_SECTION));
+    for (const a of onPage) {
+      const item = el('div', 'ponpage-item');
+      const where = el('div', 'pcallout-note', locationOf(a));
+      where.dir = 'auto';
+      item.append(where);
+      const src = a.visual?.imageId ? input.images?.get(a.visual.imageId) : undefined;
+      if (src) {
+        const img = el('img', 'ponpage-shot');
+        img.src = src;
+        img.alt = `Screenshot for comment ${a.number}`;
+        item.append(img);
+      }
+      item.append(calloutFor(a));
+      sec.append(item);
+    }
+    body.append(sec);
   }
   root.append(body);
   return root;
